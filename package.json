@@ -7,7 +7,8 @@
   "scripts": {
     "scan": "tsx \"v0.0.0.1/market-scanner.ts\"",
     "generate-wallet": "tsx \"v0.0.0.2/generate-wallet.ts\"",
-    "price-agent": "tsx \"v0.0.0.2/price-oracle-agent.ts\""
+    "price-agent": "tsx \"v0.0.0.2/price-oracle-agent.ts\"",
+    "mispricing-detector": "tsx \"v0.0.0.3/mispricing-detector.ts\""
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.28.1",
