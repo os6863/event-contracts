@@ -1,8 +1,8 @@
 {
   "name": "event-contracts-mispricing-detector",
-  "version": "0.0.0.1",
+  "version": "0.0.0.5",
   "private": true,
-  "description": "Read-only mispricing/edge detector for DreamDEX Event Contracts (Somnia x DreamDEX Hackathon).",
+  "description": "Mispricing & Edge Detector for DreamDEX Event Contracts — compares DreamDEX's implied probability against an independent, on-chain Somnia Agent (LLM) estimate. Somnia x DreamDEX Hackathon.",
   "type": "module",
   "scripts": {
     "scan": "tsx \"v0.0.0.1/market-scanner.ts\"",
