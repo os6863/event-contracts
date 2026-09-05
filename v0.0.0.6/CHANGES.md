@@ -34,5 +34,20 @@ by reading the front page of the repo rather than the version history.
 - Recording the demo video.
 - Submitting via the DoraHacks hackathon page.
 
+## Post-write finding: SDK version was silently capped below the docs' new floor
+A final re-read of `docs.dreamdex.io/developers/event-contracts` (updated
+9 hours before this check) added a new warning: **below markets-sdk
+0.29.0, `loadMarkets()` silently caps at 10,000 markets** with nothing
+to indicate it happened. `package.json` pinned `^0.28.1` — because caret
+ranges on a `0.x` package only allow patch bumps, this range could
+**never** have resolved to `0.29.0` even via `npm install` alone.
+**Fixed:** bumped to `^0.29.0`, reinstalled, and re-ran `tsc --noEmit`
+across the whole repo — no breaking API changes affected this project's
+usage. Also cross-checked the full Gotchas page against every version's
+code: all applicable gotchas (venue scoping, on-chain status gating,
+expiry headroom, keying by marketId, not parsing question text) were
+already satisfied; the order-placement-specific gotchas don't apply
+since this project never places orders on DreamDEX.
+
 ## Cost
 Zero — no on-chain calls in this version.
