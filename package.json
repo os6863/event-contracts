@@ -9,7 +9,8 @@
     "generate-wallet": "tsx \"v0.0.0.2/generate-wallet.ts\"",
     "price-agent": "tsx \"v0.0.0.2/price-oracle-agent.ts\"",
     "mispricing-detector": "tsx \"v0.0.0.3/mispricing-detector.ts\"",
-    "mispricing-detector-v2": "tsx \"v0.0.0.4/mispricing-detector.ts\""
+    "mispricing-detector-v2": "tsx \"v0.0.0.4/mispricing-detector.ts\"",
+    "mispricing-report": "tsx \"v0.0.0.5/mispricing-report.ts\""
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.28.1",

@@ -3,3 +3,4 @@ node_modules/
 dist/
 *.log
 .DS_Store
+v0.0.0.5/output/
