@@ -286,7 +286,7 @@ async function scanLiveMarkets(exchange: InstanceType<typeof SomniaMarkets>): Pr
 }
 
 async function main() {
-  console.log("\n🔎 Mispricing diagnostic — comparing DreamDEX strike vs Somnia Agent price (testnet)\n");
+  console.log("\n🎯 Mispricing detector — DreamDEX implied probability vs. Somnia Agent price (testnet)\n");
 
   const privateKey = process.env.PRIVATE_KEY;
   if (!privateKey) {
@@ -401,6 +401,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("❌ mispricing-diagnostic failed:\n", err);
+  console.error("❌ mispricing-detector failed:\n", err);
   process.exit(1);
 });
