@@ -46,3 +46,15 @@ Each market row already carries `oracleQuestionId` (per the SDK's `BinaryMarket`
 - Rendered as a second evidence link per market card, alongside the existing receipt link, only when a valid id is present.
 - New test: a valid id renders the link; non-digit, empty, negative, and injection-shaped values render no oracle link and never reach the HTML output.
 - `npm run typecheck`: passed. `npm test`: 12/12 passed (11 prior + 1 new).
+
+## Post-submission addition: simulated edge panel
+
+Every resolved, signaled history entry (`agreement !== "none"`) already carries what's needed to answer "would following this signal have paid?" — `dreamdexUp`, `ensembleEst`, `divergence`, and the real `actualOutcome`. No prior version computed this.
+
+- New `computeSimulatedEdge()` in `analysis.ts`: for each resolved, non-voided, signaled entry, simulates staking exactly 1 unit on the side the ensemble diverged toward (the sign of `divergence`), at DreamDEX's own quoted price for that side at observation time. Reports sample size, win rate, average return per signal, and net payoff, broken out by `strong` vs `weak` signal class. A zero-cost side (a 0 or 1 quoted price) is excluded — no real stake is possible there.
+- Explicitly not a backtest of executed trades: no fees, no slippage, no liquidity check, no real order. The report copy says this outright, twice, since "simulated" alone wasn't judged strong enough given how easily this class of number gets over-read.
+- New "Simulated edge" section in the HTML report, directly under Track Record, using the existing `score-grid`/`edge-data` styling — no new CSS.
+- New tests: hand-verified payoff/return math for a backed-UP win, a backed-UP loss, and a backed-DOWN win; confirms `none`-agreement, non-resolved, invalidated, zero-divergence, and zero-cost entries are all excluded from the simulation; confirms the report renders the panel when data exists and an explicit "no resolved signals yet" state otherwise.
+- Caught in review before shipping: the empty-bucket copy read "No resolved weak signals signals yet." (title already contained "signals", the template appended it again) — fixed to a class-agnostic message.
+- `npm run typecheck`: passed. `npm test`: 14/14 passed (12 prior + 2 new).
+- Sanity-checked against this repo's own real `data/signal-history.json` (not just synthetic fixtures): ran cleanly, returned `{n: 2, wins: 0, avgReturnPct: -100%}` for strong signals — an honestly bad small-sample result, which is exactly the kind of number this panel exists to surface without softening.

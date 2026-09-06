@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
 import vm from "node:vm";
-import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes } from "./analysis.js";
+import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
 import type { ReportRow, HistoryEntry } from "./types.js";
@@ -58,6 +58,38 @@ test("real binary outcome math and invalid outcomes", () => {
   assert.equal(no.actualOutcome,"NO"); assert.equal(no.dreamdexBrier,.09);
   assert.throws(()=>settleEntries([{...entry}],{isVoided:false,isResolved:true,winningOutcome:2}));
 });
+test("simulated edge only counts resolved, signaled trades and picks the diverged side", () => {
+  // entry: dreamdexUp .3, ensembleEst .675 -> divergence +.375 -> backs UP, cost .3
+  const strongWin = {...entry, resolved: true as const, actualOutcome: "YES" as const};
+  const summary1 = computeSimulatedEdge([strongWin]);
+  assert.equal(summary1.strong!.n, 1); assert.equal(summary1.strong!.wins, 1);
+  assert.ok(Math.abs(summary1.strong!.totalPayoff - 0.7) < 1e-9);
+  assert.ok(Math.abs(summary1.strong!.avgReturnPct - (0.7/0.3)) < 1e-9);
+  assert.equal(summary1.weak, null);
+
+  const strongLoss = {...entry, resolved: true as const, actualOutcome: "NO" as const};
+  const summary2 = computeSimulatedEdge([strongLoss]);
+  assert.equal(summary2.strong!.wins, 0); assert.ok(Math.abs(summary2.strong!.totalPayoff - (-0.3)) < 1e-9);
+
+  // Negative divergence backs DOWN: dreamdexUp .9, ensembleEst .7 -> divergence -.2, cost = 1-.9 = .1
+  const backsDown = {...entry, dreamdexUp: .9, ensembleEst: .7, divergence: -.2, agreement: "weak" as const, resolved: true as const, actualOutcome: "NO" as const};
+  const summary3 = computeSimulatedEdge([backsDown]);
+  assert.equal(summary3.weak!.n, 1); assert.equal(summary3.weak!.wins, 1);
+  assert.ok(Math.abs(summary3.weak!.totalPayoff - 0.9) < 1e-9);
+  assert.equal(summary3.strong, null);
+
+  // Excluded: no signal, not resolved, invalidated, zero divergence, zero-cost side.
+  const excluded = [
+    {...entry, agreement: "none" as const, resolved: true as const, actualOutcome: "YES" as const},
+    {...entry, resolved: undefined, actualOutcome: undefined},
+    {...entry, resolved: "voided" as const},
+    {...entry, invalidated: true, resolved: true as const, actualOutcome: "YES" as const},
+    {...entry, divergence: 0, resolved: true as const, actualOutcome: "YES" as const},
+    {...entry, dreamdexUp: 0, divergence: .5, resolved: true as const, actualOutcome: "YES" as const}, // backs UP at cost 0
+  ];
+  const summaryEmpty = computeSimulatedEdge(excluded);
+  assert.equal(summaryEmpty.strong, null); assert.equal(summaryEmpty.weak, null); assert.equal(summaryEmpty.combined, null);
+});
 test("history preserves legacy rows and only appends usable observations", async () => {
   const dir=await mkdtemp(join(tmpdir(),"edgescope-test-"));
   try {
@@ -89,6 +121,15 @@ test("oracle explorer link renders only for a valid decimal question id", () => 
     const html = renderReport([{...row, oracleQuestionId: bad as any}],[],row.observedAt!);
     assert.ok(!html.includes("prd.oracle.somnia.host"));
   }
+});
+test("simulated edge section renders resolved trades and an explicit empty state otherwise", () => {
+  const resolvedEntry = {...entry, resolved: true as const, actualOutcome: "YES" as const};
+  const withData = renderReport([row], [resolvedEntry], row.observedAt!);
+  assert.ok(withData.includes("Simulated edge"));
+  assert.ok(withData.includes("Strong signals"));
+  assert.ok(!withData.includes("No resolved signals yet to simulate"));
+  const withoutData = renderReport([row], [entry], row.observedAt!);
+  assert.ok(withoutData.includes("No resolved signals yet to simulate"));
 });
 test("rendering leaves all analytical values and ordering untouched", () => {
   const rows=[{...row,agreement:"none" as const},{...row}];const before=structuredClone(rows);renderReport(rows,[entry],row.observedAt!);assert.deepEqual(rows,before);

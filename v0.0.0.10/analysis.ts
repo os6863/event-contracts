@@ -1,4 +1,4 @@
-import type { SignalAgreement } from "./types.js";
+import type { SignalAgreement, HistoryEntry } from "./types.js";
 export const MISPRICING_ALERT_THRESHOLD = 0.15;
 const ASSET_ANNUAL_VOLATILITY: Record<string, number> = { BTC: 0.55, ETH: 0.7 };
 const DEFAULT_ANNUAL_VOLATILITY = 0.6;
@@ -59,4 +59,54 @@ export function remainingMinutes(expirySeconds: number, observedMs = Date.now())
 }
 export function validMarketId(id: unknown): id is string {
   return typeof id === "string" && /^0x[0-9a-fA-F]{64}$/.test(id);
+}
+
+export type SimulatedEdgeBucket = {
+  n: number;
+  wins: number;
+  winRate: number;
+  avgReturnPct: number;
+  totalPayoff: number;
+};
+export type SimulatedEdgeSummary = { strong: SimulatedEdgeBucket | null; weak: SimulatedEdgeBucket | null; combined: SimulatedEdgeBucket | null };
+
+/**
+ * Hypothetical, not a backtest of real trades: for every resolved, non-void
+ * history entry that actually carried a signal (agreement !== "none"),
+ * simulate staking exactly 1 unit on the side the ensemble diverged
+ * toward, at DreamDEX's own quoted price for that side, and see what a
+ * flat-1-unit-per-signal strategy would have paid out. This is a
+ * transparency tool for a small sample, not a profitability claim — the
+ * caller is responsible for surfacing sample size alongside any number
+ * this returns.
+ */
+export function computeSimulatedEdge(history: HistoryEntry[]): SimulatedEdgeSummary {
+  type Trade = { won: boolean; payoff: number; returnPct: number };
+  const trades: { strong: Trade[]; weak: Trade[] } = { strong: [], weak: [] };
+  for (const h of history) {
+    if (h.invalidated || h.resolved !== true || h.agreement === "none") continue;
+    if (typeof h.actualOutcome !== "string" || (h.actualOutcome !== "YES" && h.actualOutcome !== "NO")) continue;
+    if (!Number.isFinite(h.dreamdexUp) || h.dreamdexUp < 0 || h.dreamdexUp > 1) continue;
+    if (!Number.isFinite(h.divergence) || h.divergence === 0) continue;
+    const backingUp = h.divergence > 0;
+    const cost = backingUp ? h.dreamdexUp : 1 - h.dreamdexUp;
+    if (!(cost > 0)) continue; // no real stake possible at a 0-priced side
+    const won = backingUp ? h.actualOutcome === "YES" : h.actualOutcome === "NO";
+    const payoff = (won ? 1 : 0) - cost;
+    const trade: Trade = { won, payoff, returnPct: payoff / cost };
+    if (h.agreement === "strong") trades.strong.push(trade);
+    else if (h.agreement === "weak") trades.weak.push(trade);
+  }
+  const summarize = (list: Trade[]): SimulatedEdgeBucket | null => {
+    if (!list.length) return null;
+    const wins = list.filter(t => t.won).length;
+    return {
+      n: list.length,
+      wins,
+      winRate: wins / list.length,
+      avgReturnPct: list.reduce((s, t) => s + t.returnPct, 0) / list.length,
+      totalPayoff: list.reduce((s, t) => s + t.payoff, 0),
+    };
+  };
+  return { strong: summarize(trades.strong), weak: summarize(trades.weak), combined: summarize([...trades.strong, ...trades.weak]) };
 }
