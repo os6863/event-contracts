@@ -78,9 +78,12 @@ roughly 1.5-2 STT (see Cost breakdown below).
 
 **3. Run the latest version:**
 ```bash
-npm run mispricing-report
+npm run mispricing-report-v2
 ```
-Then open `v0.0.0.5/output/report.html` in a browser.
+Then open `v0.0.0.7/output/report.html` in a browser, or — once GitHub
+Pages is enabled on this repo (Settings → Pages → Deploy from branch →
+`main` → `/docs`) — view the live version at
+`https://<username>.github.io/event-contracts/`, no cloning required.
 
 ## Versioned development history
 
@@ -98,14 +101,15 @@ testnet, not by guessing.
 | [v0.0.0.3](v0.0.0.3/CHANGES.md) | First real mispricing signal (DreamDEX vs. price move) | A market field (`strike`) that reads as `0` for this market type; the real fix was a different SDK call (`getOpeningPrices`) |
 | [v0.0.0.4](v0.0.0.4/CHANGES.md) | Naive formula replaced by a genuine LLM (Qwen3-30B) probability estimate | Wrong field name for the model's reasoning text; a qualitative calibration prompt that over/under-corrected twice before numeric anchor points fixed it; one shared timeout that was fine for a fast agent and far too short for a slow one |
 | [v0.0.0.5](v0.0.0.5/CHANGES.md) | Presentable HTML report for the demo, plus full (untruncated) AI reasoning | The Receipts Service's fast preview mode replaces long fields with a placeholder instead of a snippet — added a follow-up fetch for the complete text |
-| [v0.0.0.6](v0.0.0.6/CHANGES.md) | Final polish — no new detection logic | Whole-repo re-review (all versions type-checked together); this README hadn't been updated since v0.0.0.1 and still described only the read-only scanner |
+| [v0.0.0.6](v0.0.0.6/CHANGES.md) | Final polish — no new detection logic | Whole-repo re-review (all versions type-checked together); this README hadn't been updated since v0.0.0.1 and still described only the read-only scanner; caught that `package.json`'s `^0.28.1` range could never resolve to the docs' newly-required `0.29.0` floor |
+| [v0.0.0.7](v0.0.0.7/CHANGES.md) | Ensemble signal (naive + LLM cross-validated), a growing signal history, and a live GitHub Pages report | An LLM outlier (`0.99` for a market that moved *down*) would have produced a false "strong" signal alone — the ensemble check downgrades it to "weak" since the naive baseline disagrees |
 
 Running an earlier version still works — each folder is complete on
 its own (`cd` into it isn't required; the root `package.json` has a
 script per version). See each version's own `CHANGES.md` for exact run
 instructions and sample output.
 
-## Cost breakdown (per full run of v0.0.0.5)
+## Cost breakdown (per full run of v0.0.0.7 — same agent calls as v0.0.0.5)
 
 | Step | Somnia Agent calls | Approx. STT |
 |---|---|---|

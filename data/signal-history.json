@@ -1,0 +1,46 @@
+[
+  {
+    "timestamp": "2026-09-06T16:59:48.255Z",
+    "symbol": "ETH-0-06SEP26-2000/tUSDC#YES",
+    "asset": "ETH",
+    "dreamdexUp": 0.6194999999999999,
+    "naiveEst": 0.5103862591726482,
+    "llmEst": 0.55,
+    "ensembleEst": 0.5301931295863241,
+    "divergence": -0.0893068704136758,
+    "agreement": "none"
+  },
+  {
+    "timestamp": "2026-09-06T16:59:48.255Z",
+    "symbol": "BTC-0-06SEP26-2000/tUSDC#YES",
+    "asset": "BTC",
+    "dreamdexUp": 0.4495,
+    "naiveEst": 0.4990767015161668,
+    "llmEst": 0.495,
+    "ensembleEst": 0.4970383507580834,
+    "divergence": 0.04753835075808338,
+    "agreement": "none"
+  },
+  {
+    "timestamp": "2026-09-06T16:59:48.255Z",
+    "symbol": "BTC-0-07SEP26/tUSDC#YES",
+    "asset": "BTC",
+    "dreamdexUp": 0.299,
+    "naiveEst": 0.48737832883111154,
+    "llmEst": 0.45,
+    "ensembleEst": 0.46868916441555575,
+    "divergence": 0.16968916441555576,
+    "agreement": "strong"
+  },
+  {
+    "timestamp": "2026-09-06T16:59:48.255Z",
+    "symbol": "ETH-0-07SEP26/tUSDC#YES",
+    "asset": "ETH",
+    "dreamdexUp": 0.5635,
+    "naiveEst": 0.508513451414474,
+    "llmEst": 0.52,
+    "ensembleEst": 0.514256725707237,
+    "divergence": -0.049243274292762984,
+    "agreement": "none"
+  }
+]
