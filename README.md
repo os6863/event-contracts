@@ -139,7 +139,7 @@ npm run check-outcomes
 Then open `v0.0.0.10/output/report.html` in a browser, or — once GitHub
 Pages is enabled on this repo (Settings → Pages → Deploy from branch →
 `main` → `/docs`) — view the live version at
-`https://<username>.github.io/event-contracts/`, no cloning required.
+`https://os6863.github.io/event-contracts/`, no cloning required.
 Run `check-outcomes` again periodically as logged markets close, to
 grow the real, Brier-scored track record.
 
@@ -170,7 +170,7 @@ its own (`cd` into it isn't required; the root `package.json` has a
 script per version). See each version's own `CHANGES.md` for exact run
 instructions and sample output.
 
-## Cost breakdown (per full run of v0.0.0.9 — same agent calls as v0.0.0.5; `check-outcomes` is free/read-only)
+## Cost breakdown (per full run of v0.0.0.10; `check-outcomes` is free/read-only)
 
 | Step | Somnia Agent calls | Approx. STT |
 |---|---|---|
@@ -208,7 +208,7 @@ testing.
 - The naive/LLM probability estimates are not calibrated financial
   models; they exist to demonstrate a verifiable on-chain AI signal,
   not to be traded on directly. `ASSET_ANNUAL_VOLATILITY` in
-  v0.0.0.9's naive formula is an assumed constant, not fitted from real
+  v0.0.0.10's naive formula is an assumed constant, not fitted from real
   price history.
 - Not audited — this is hackathon/testnet code.
 
