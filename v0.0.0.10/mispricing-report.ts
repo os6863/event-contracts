@@ -341,6 +341,7 @@ type ScannedMarket = {
   question: string;
   asset: string;
   marketId: string;
+  oracleQuestionId: string | null;
   upPrice: number | null;
   secondsLeft: number;
   expiry: number;
@@ -386,6 +387,9 @@ async function scanLiveMarkets(exchange: InstanceType<typeof SomniaMarkets>): Pr
       question: m.info.question,
       asset: m.info.asset,
       marketId: m.info.marketId,
+      // Null on a market discovered from the realtime tail — the indexer
+      // fills it in on the next snapshot (docs: Market Structure & Lifecycle).
+      oracleQuestionId: m.info.oracleQuestionId ?? null,
       upPrice,
       secondsLeft: Math.round(secondsLeft),
       expiry: Number(m.info.expiry),
@@ -485,6 +489,7 @@ async function main() {
     const prices = new Map<string, PriceObservation>();
     for (const m of markets) {
       const row: ReportRow = { symbol: m.symbol, marketId: m.marketId, question: m.question, asset: m.asset,
+        oracleQuestionId: m.oracleQuestionId,
         openingPrice: null, currentPrice: null, movePct: null, dreamdexUp: null, naiveEst: null,
         llmEst: null, ensembleEst: null, llmStatus: "skipped", divergence: null, flagged: false,
         agreement: "none", thinking: null, reasoningTruncated: false, expiresAt: new Date(m.expiry * 1000).toISOString() };

@@ -5,6 +5,7 @@ export type ReportRow = {
   marketId: string;
   question: string;
   asset: string;
+  oracleQuestionId?: string | null;
   openingPrice: number | null;
   currentPrice: number | null;
   movePct: number | null;

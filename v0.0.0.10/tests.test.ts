@@ -81,6 +81,15 @@ test("renderer escapes external strings and excludes invalid rows from strongest
   assert.ok(invalidHistory.includes('>Excluded<')); assert.ok(invalidHistory.includes('bad &lt;receipt&gt;'));
   for (const v of [NaN, Infinity, null, undefined, -1, 2]) assert.equal(formatProbability(v),"n/a");
 });
+test("oracle explorer link renders only for a valid decimal question id", () => {
+  const withId = renderReport([{...row, oracleQuestionId: "9182734"}],[],row.observedAt!);
+  assert.ok(withId.includes('https://prd.oracle.somnia.host/questions/9182734?view=graph'));
+  assert.ok(withId.includes("Audit the resolution on the Oracle Explorer"));
+  for (const bad of [null, undefined, "", "0x1a", "12; DROP TABLE", "12abc", "-5"]) {
+    const html = renderReport([{...row, oracleQuestionId: bad as any}],[],row.observedAt!);
+    assert.ok(!html.includes("prd.oracle.somnia.host"));
+  }
+});
 test("rendering leaves all analytical values and ordering untouched", () => {
   const rows=[{...row,agreement:"none" as const},{...row}];const before=structuredClone(rows);renderReport(rows,[entry],row.observedAt!);assert.deepEqual(rows,before);
 });

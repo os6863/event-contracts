@@ -23,6 +23,17 @@ function safeReceipt(url: unknown): string | null {
   if (typeof url !== "string") return null;
   try { const u = new URL(url); return u.protocol === "https:" && !u.username && !u.password ? u.href : null; } catch { return null; }
 }
+/**
+ * oracleQuestionId is a uint256 as a decimal string (docs: Market Structure
+ * & Lifecycle). Validate the shape before building a URL from it — same
+ * discipline as safeReceipt above, applied to a field sourced from the
+ * indexer rather than user input, but external data either way.
+ */
+function oracleExplorerUrl(id: unknown): string | null {
+  return typeof id === "string" && /^[0-9]+$/.test(id)
+    ? `https://prd.oracle.somnia.host/questions/${id}?view=graph`
+    : null;
+}
 const eligible = (r: ReportRow) => r.llmStatus === "ok" && prob(r.dreamdexUp) && prob(r.naiveEst) && prob(r.llmEst) && prob(r.ensembleEst) && finite(r.divergence);
 function explanation(r: ReportRow): string {
   if (r.llmStatus === "expired") return "This market expired during report generation. It is excluded from signal counts and scoring history.";
@@ -39,6 +50,7 @@ function bar(name: string, value: unknown, cls: string) {
 function renderCard(r: ReportRow, index: number): string {
   const state = eligible(r) ? signal(r.agreement) : "none";
   const url = safeReceipt(r.receiptUrl);
+  const oracleUrl = oracleExplorerUrl(r.oracleQuestionId);
   return `<article class="signal-card" data-signal="${state}">
     <div class="card-top"><div class="identity"><span class="asset-icon ${r.asset === "ETH" ? "eth" : "btc"}" aria-hidden="true">${r.asset === "ETH" ? "Ξ" : r.asset === "BTC" ? "₿" : "·"}</span><div><span class="eyebrow">${escapeHtml(r.asset)} / EVENT CONTRACT</span><h3>${escapeHtml(r.question)}</h3></div></div>${badge(state)}</div>
     <p class="symbol">${escapeHtml(r.symbol)}</p>
@@ -51,7 +63,8 @@ function renderCard(r: ReportRow, index: number): string {
     <p class="agent-status">${r.llmStatus === "ok" ? "Successful agent receipt · final answer checked" : r.llmStatus === "expired" ? "Receipt checked · market expired" : r.llmStatus === "failed" ? "LLM estimate unavailable" : "Estimate skipped — incomplete source data"}</p>
     ${r.retried ? '<p class="notice">A malformed initial response was rejected. The displayed result comes from one retry without extended reasoning.</p>' : ""}
     ${r.issue ? `<p class="notice">${escapeHtml(r.issue)}</p>` : ""}
-    ${url ? external(url, `View receipt${r.requestId ? ` · ${r.requestId}` : ""}`) : ""}</div></details>
+    ${url ? external(url, `View receipt${r.requestId ? ` · ${r.requestId}` : ""}`) : ""}
+    ${oracleUrl ? external(oracleUrl, "Audit the resolution on the Oracle Explorer") : ""}</div></details>
     <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
       <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> ${escapeHtml(r.asset)} moved ${move(r.movePct)} from its opening price.</p><p><b>Time:</b> ${finite(r.minutesLeft) ? `${r.minutesLeft.toFixed(1)} minutes remained when these inputs were observed.` : "Timing data is unavailable."}</p><p><b>Comparison:</b> The baseline is ${formatProbability(r.naiveEst)} and the LLM estimate is ${formatProbability(r.llmEst)}. ${explanation(r)}</p></div>
       ${r.thinking ? `<details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market ${index + 1}">${escapeHtml(r.thinking)}</div></details>` : `<p class="muted">${r.reasoningTruncated ? "Reasoning was generated but could not be fully retrieved for this report." : r.retried ? "The accepted retry requested a numeric answer without extended reasoning." : "No original reasoning was returned for this estimate."}</p>`}

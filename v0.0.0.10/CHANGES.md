@@ -36,3 +36,13 @@ npm run check-outcomes
 ```
 
 `npm run render-report` regenerates HTML from an existing v10 snapshot without Agent calls or a history append.
+
+## Post-submission addition: Oracle Explorer deep link
+
+Each market row already carries `oracleQuestionId` (per the SDK's `BinaryMarket` type). The Market Structure & Lifecycle docs note this is worth surfacing in any interface built on Event Contracts, since it deep-links to the oracle's own resolution graph — the price sources, the median, and the receipt behind a market's settlement. No prior version exposed it.
+
+- Threaded `oracleQuestionId` through `ScannedMarket` → `ReportRow` (optional, since the SDK types it nullable for markets discovered from the realtime tail before the next indexer snapshot fills it in).
+- `report-ui.ts` validates the id is a plain decimal string (its documented uint256-as-string shape) before building a URL from it — same discipline as the existing receipt-URL validation, applied to a second externally-sourced field.
+- Rendered as a second evidence link per market card, alongside the existing receipt link, only when a valid id is present.
+- New test: a valid id renders the link; non-digit, empty, negative, and injection-shaped values render no oracle link and never reach the HTML output.
+- `npm run typecheck`: passed. `npm test`: 12/12 passed (11 prior + 1 new).

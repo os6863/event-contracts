@@ -1,0 +1,152 @@
+diff --git a/package-lock.json b/package-lock.json
+index 4741204..3c73986 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -758,7 +758,6 @@
+       "integrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+       "devOptional": true,
+       "license": "Apache-2.0",
+-      "peer": true,
+       "bin": {
+         "tsc": "bin/tsc",
+         "tsserver": "bin/tsserver"
+@@ -785,7 +784,6 @@
+         }
+       ],
+       "license": "MIT",
+-      "peer": true,
+       "dependencies": {
+         "@noble/curves": "1.9.1",
+         "@noble/hashes": "1.8.0",
+@@ -810,7 +808,6 @@
+       "resolved": "https://registry.npmjs.org/ws/-/ws-8.21.0.tgz",
+       "integrity": "sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==",
+       "license": "MIT",
+-      "peer": true,
+       "engines": {
+         "node": ">=10.0.0"
+       },
+diff --git a/v0.0.0.10/CHANGES.md b/v0.0.0.10/CHANGES.md
+index 6494d25..75c03e0 100644
+--- a/v0.0.0.10/CHANGES.md
++++ b/v0.0.0.10/CHANGES.md
+@@ -35,4 +35,14 @@ npm run mispricing-report-v5
+ npm run check-outcomes
+ ```
+ 
+-`npm run render-report` regenerates HTML from an existing v10 snapshot without Agent calls or a history append.
+\ No newline at end of file
++`npm run render-report` regenerates HTML from an existing v10 snapshot without Agent calls or a history append.
++
++## Post-submission addition: Oracle Explorer deep link
++
++Each market row already carries `oracleQuestionId` (per the SDK's `BinaryMarket` type). The Market Structure & Lifecycle docs note this is worth surfacing in any interface built on Event Contracts, since it deep-links to the oracle's own resolution graph — the price sources, the median, and the receipt behind a market's settlement. No prior version exposed it.
++
++- Threaded `oracleQuestionId` through `ScannedMarket` → `ReportRow` (optional, since the SDK types it nullable for markets discovered from the realtime tail before the next indexer snapshot fills it in).
++- `report-ui.ts` validates the id is a plain decimal string (its documented uint256-as-string shape) before building a URL from it — same discipline as the existing receipt-URL validation, applied to a second externally-sourced field.
++- Rendered as a second evidence link per market card, alongside the existing receipt link, only when a valid id is present.
++- New test: a valid id renders the link; non-digit, empty, negative, and injection-shaped values render no oracle link and never reach the HTML output.
++- `npm run typecheck`: passed. `npm test`: 12/12 passed (11 prior + 1 new).
+\ No newline at end of file
+diff --git a/v0.0.0.10/mispricing-report.ts b/v0.0.0.10/mispricing-report.ts
+index b510fe8..fe7d1c8 100644
+--- a/v0.0.0.10/mispricing-report.ts
++++ b/v0.0.0.10/mispricing-report.ts
+@@ -341,6 +341,7 @@ type ScannedMarket = {
+   question: string;
+   asset: string;
+   marketId: string;
++  oracleQuestionId: string | null;
+   upPrice: number | null;
+   secondsLeft: number;
+   expiry: number;
+@@ -386,6 +387,9 @@ async function scanLiveMarkets(exchange: InstanceType<typeof SomniaMarkets>): Pr
+       question: m.info.question,
+       asset: m.info.asset,
+       marketId: m.info.marketId,
++      // Null on a market discovered from the realtime tail — the indexer
++      // fills it in on the next snapshot (docs: Market Structure & Lifecycle).
++      oracleQuestionId: m.info.oracleQuestionId ?? null,
+       upPrice,
+       secondsLeft: Math.round(secondsLeft),
+       expiry: Number(m.info.expiry),
+@@ -485,6 +489,7 @@ async function main() {
+     const prices = new Map<string, PriceObservation>();
+     for (const m of markets) {
+       const row: ReportRow = { symbol: m.symbol, marketId: m.marketId, question: m.question, asset: m.asset,
++        oracleQuestionId: m.oracleQuestionId,
+         openingPrice: null, currentPrice: null, movePct: null, dreamdexUp: null, naiveEst: null,
+         llmEst: null, ensembleEst: null, llmStatus: "skipped", divergence: null, flagged: false,
+         agreement: "none", thinking: null, reasoningTruncated: false, expiresAt: new Date(m.expiry * 1000).toISOString() };
+diff --git a/v0.0.0.10/report-ui.ts b/v0.0.0.10/report-ui.ts
+index d7e4ca0..e549e2c 100644
+--- a/v0.0.0.10/report-ui.ts
++++ b/v0.0.0.10/report-ui.ts
+@@ -23,6 +23,17 @@ function safeReceipt(url: unknown): string | null {
+   if (typeof url !== "string") return null;
+   try { const u = new URL(url); return u.protocol === "https:" && !u.username && !u.password ? u.href : null; } catch { return null; }
+ }
++/**
++ * oracleQuestionId is a uint256 as a decimal string (docs: Market Structure
++ * & Lifecycle). Validate the shape before building a URL from it — same
++ * discipline as safeReceipt above, applied to a field sourced from the
++ * indexer rather than user input, but external data either way.
++ */
++function oracleExplorerUrl(id: unknown): string | null {
++  return typeof id === "string" && /^[0-9]+$/.test(id)
++    ? `https://prd.oracle.somnia.host/questions/${id}?view=graph`
++    : null;
++}
+ const eligible = (r: ReportRow) => r.llmStatus === "ok" && prob(r.dreamdexUp) && prob(r.naiveEst) && prob(r.llmEst) && prob(r.ensembleEst) && finite(r.divergence);
+ function explanation(r: ReportRow): string {
+   if (r.llmStatus === "expired") return "This market expired during report generation. It is excluded from signal counts and scoring history.";
+@@ -39,6 +50,7 @@ function bar(name: string, value: unknown, cls: string) {
+ function renderCard(r: ReportRow, index: number): string {
+   const state = eligible(r) ? signal(r.agreement) : "none";
+   const url = safeReceipt(r.receiptUrl);
++  const oracleUrl = oracleExplorerUrl(r.oracleQuestionId);
+   return `<article class="signal-card" data-signal="${state}">
+     <div class="card-top"><div class="identity"><span class="asset-icon ${r.asset === "ETH" ? "eth" : "btc"}" aria-hidden="true">${r.asset === "ETH" ? "Ξ" : r.asset === "BTC" ? "₿" : "·"}</span><div><span class="eyebrow">${escapeHtml(r.asset)} / EVENT CONTRACT</span><h3>${escapeHtml(r.question)}</h3></div></div>${badge(state)}</div>
+     <p class="symbol">${escapeHtml(r.symbol)}</p>
+@@ -51,7 +63,8 @@ function renderCard(r: ReportRow, index: number): string {
+     <p class="agent-status">${r.llmStatus === "ok" ? "Successful agent receipt · final answer checked" : r.llmStatus === "expired" ? "Receipt checked · market expired" : r.llmStatus === "failed" ? "LLM estimate unavailable" : "Estimate skipped — incomplete source data"}</p>
+     ${r.retried ? '<p class="notice">A malformed initial response was rejected. The displayed result comes from one retry without extended reasoning.</p>' : ""}
+     ${r.issue ? `<p class="notice">${escapeHtml(r.issue)}</p>` : ""}
+-    ${url ? external(url, `View receipt${r.requestId ? ` · ${r.requestId}` : ""}`) : ""}</div></details>
++    ${url ? external(url, `View receipt${r.requestId ? ` · ${r.requestId}` : ""}`) : ""}
++    ${oracleUrl ? external(oracleUrl, "Audit the resolution on the Oracle Explorer") : ""}</div></details>
+     <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+       <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> ${escapeHtml(r.asset)} moved ${move(r.movePct)} from its opening price.</p><p><b>Time:</b> ${finite(r.minutesLeft) ? `${r.minutesLeft.toFixed(1)} minutes remained when these inputs were observed.` : "Timing data is unavailable."}</p><p><b>Comparison:</b> The baseline is ${formatProbability(r.naiveEst)} and the LLM estimate is ${formatProbability(r.llmEst)}. ${explanation(r)}</p></div>
+       ${r.thinking ? `<details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market ${index + 1}">${escapeHtml(r.thinking)}</div></details>` : `<p class="muted">${r.reasoningTruncated ? "Reasoning was generated but could not be fully retrieved for this report." : r.retried ? "The accepted retry requested a numeric answer without extended reasoning." : "No original reasoning was returned for this estimate."}</p>`}
+diff --git a/v0.0.0.10/tests.test.ts b/v0.0.0.10/tests.test.ts
+index 156c857..f55fe09 100644
+--- a/v0.0.0.10/tests.test.ts
++++ b/v0.0.0.10/tests.test.ts
+@@ -81,6 +81,15 @@ test("renderer escapes external strings and excludes invalid rows from strongest
+   assert.ok(invalidHistory.includes('>Excluded<')); assert.ok(invalidHistory.includes('bad &lt;receipt&gt;'));
+   for (const v of [NaN, Infinity, null, undefined, -1, 2]) assert.equal(formatProbability(v),"n/a");
+ });
++test("oracle explorer link renders only for a valid decimal question id", () => {
++  const withId = renderReport([{...row, oracleQuestionId: "9182734"}],[],row.observedAt!);
++  assert.ok(withId.includes('https://prd.oracle.somnia.host/questions/9182734?view=graph'));
++  assert.ok(withId.includes("Audit the resolution on the Oracle Explorer"));
++  for (const bad of [null, undefined, "", "0x1a", "12; DROP TABLE", "12abc", "-5"]) {
++    const html = renderReport([{...row, oracleQuestionId: bad as any}],[],row.observedAt!);
++    assert.ok(!html.includes("prd.oracle.somnia.host"));
++  }
++});
+ test("rendering leaves all analytical values and ordering untouched", () => {
+   const rows=[{...row,agreement:"none" as const},{...row}];const before=structuredClone(rows);renderReport(rows,[entry],row.observedAt!);assert.deepEqual(rows,before);
+ });
+diff --git a/v0.0.0.10/types.ts b/v0.0.0.10/types.ts
+index 637f472..e90de47 100644
+--- a/v0.0.0.10/types.ts
++++ b/v0.0.0.10/types.ts
+@@ -5,6 +5,7 @@ export type ReportRow = {
+   marketId: string;
+   question: string;
+   asset: string;
++  oracleQuestionId?: string | null;
+   openingPrice: number | null;
+   currentPrice: number | null;
+   movePct: number | null;
