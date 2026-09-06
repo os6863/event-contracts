@@ -49,6 +49,61 @@ Setup below).
               console table + styled HTML report
 ```
 
+## Formulas
+
+**Naive baseline** — a volatility-scaled, time-aware estimate (not a
+plain linear guess; see [v0.0.0.9/CHANGES.md](v0.0.0.9/CHANGES.md) for
+why the earlier linear version was wrong):
+
+```
+σ_window = σ_annual(asset) × √(minutes_left / minutes_per_year)
+z        = (price_move_% / 100) / σ_window
+naive_p  = Φ(z)                          — Φ = standard normal CDF
+```
+`σ_annual` is an assumed constant per asset (BTC 0.55, ETH 0.70) — not
+fitted from historical price data, which this project doesn't collect.
+The `√t` scaling matches standard random-walk / Black-Scholes practice:
+the same % move is far more significant with little time left than with
+a lot of time left.
+
+**LLM estimate** — from the Somnia LLM Inference agent (Qwen3-30B),
+prompted with the same opening price, current price, % move, and time
+remaining, plus calibration anchor points (see
+[v0.0.0.4/CHANGES.md](v0.0.0.4/CHANGES.md) for how those anchors were
+tuned against real miscalibration bugs).
+
+**Ensemble & divergence:**
+```
+ensemble_p = (naive_p + llm_p) / 2
+divergence = ensemble_p − dreamdex_implied_p
+```
+A market is flagged **strong** only when both `naive_p` and `llm_p`
+individually diverge from DreamDEX's price by ≥ 0.15 **in the same
+direction** — not just the averaged ensemble. **weak** means only one of
+the two diverges. See
+[v0.0.0.7/CHANGES.md](v0.0.0.7/CHANGES.md) for the real case (an LLM
+call returning 0.99 for a market that had moved *down*) this guard was
+built to catch.
+
+## Somnia testnet details
+
+| | |
+|---|---|
+| Chain | Somnia Shannon Testnet, chain id `50312` |
+| Somnia Agents platform contract | `0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776` |
+| JSON API Request agent id | `13174292974160097713` |
+| LLM Inference agent id | `12847293847561029384` |
+| Receipts Service | `https://receipts.testnet.agents.somnia.host` |
+| DreamDEX indexer (via SDK) | `https://dev.smk.somnia.host/v1/graphql` |
+| Agent Explorer | https://agents.testnet.somnia.network |
+
+Agent ids and the venue id used to filter DreamDEX's markets are
+platform data, not guaranteed permanent — see
+[v0.0.0.1/CHANGES.md](v0.0.0.1/CHANGES.md) and
+[v0.0.0.2/CHANGES.md](v0.0.0.2/CHANGES.md) for what to do if a script
+ever reports zero markets/agents unexpectedly (the scripts have
+built-in discovery fallbacks for exactly this).
+
 ## Quickstart (run the current version)
 
 ```bash
@@ -78,12 +133,15 @@ roughly 1.5-2 STT (see Cost breakdown below).
 
 **3. Run the latest version:**
 ```bash
-npm run mispricing-report-v2
+npm run mispricing-report-v5
+npm run check-outcomes
 ```
-Then open `v0.0.0.7/output/report.html` in a browser, or — once GitHub
+Then open `v0.0.0.10/output/report.html` in a browser, or — once GitHub
 Pages is enabled on this repo (Settings → Pages → Deploy from branch →
 `main` → `/docs`) — view the live version at
 `https://<username>.github.io/event-contracts/`, no cloning required.
+Run `check-outcomes` again periodically as logged markets close, to
+grow the real, Brier-scored track record.
 
 ## Versioned development history
 
@@ -103,13 +161,16 @@ testnet, not by guessing.
 | [v0.0.0.5](v0.0.0.5/CHANGES.md) | Presentable HTML report for the demo, plus full (untruncated) AI reasoning | The Receipts Service's fast preview mode replaces long fields with a placeholder instead of a snippet — added a follow-up fetch for the complete text |
 | [v0.0.0.6](v0.0.0.6/CHANGES.md) | Final polish — no new detection logic | Whole-repo re-review (all versions type-checked together); this README hadn't been updated since v0.0.0.1 and still described only the read-only scanner; caught that `package.json`'s `^0.28.1` range could never resolve to the docs' newly-required `0.29.0` floor |
 | [v0.0.0.7](v0.0.0.7/CHANGES.md) | Ensemble signal (naive + LLM cross-validated), a growing signal history, and a live GitHub Pages report | An LLM outlier (`0.99` for a market that moved *down*) would have produced a false "strong" signal alone — the ensemble check downgrades it to "weak" since the naive baseline disagrees |
+| [v0.0.0.8](v0.0.0.8/CHANGES.md) | Real outcome verification against on-chain settlement + Brier-scored track record | None — this version's own honest limitation is that it can't validate against a real settled market until one actually closes, which needs elapsed time, not more code |
+| [v0.0.0.9](v0.0.0.9/CHANGES.md) | Time-aware (√t-scaled) naive baseline replacing the old fixed-linear formula; structured AI reasoning output | The naive formula had ignored time-to-expiry entirely since v0.0.0.3 — same % move always gave the same estimate whether 15 minutes or 24 hours remained, caught by external review |
+| [v0.0.0.10](v0.0.0.10/CHANGES.md) | Receipt-checked estimates, timestamped inputs, safe legacy history, and the responsive EdgeScope report | A successful receipt decoded to `0` while its reasoning concluded `6500`; v10 rejects mismatched/malformed final answers and never promotes them to signals |
 
 Running an earlier version still works — each folder is complete on
 its own (`cd` into it isn't required; the root `package.json` has a
 script per version). See each version's own `CHANGES.md` for exact run
 instructions and sample output.
 
-## Cost breakdown (per full run of v0.0.0.7 — same agent calls as v0.0.0.5)
+## Cost breakdown (per full run of v0.0.0.9 — same agent calls as v0.0.0.5; `check-outcomes` is free/read-only)
 
 | Step | Somnia Agent calls | Approx. STT |
 |---|---|---|
@@ -130,10 +191,25 @@ testing.
 
 ## What this project is *not*
 
-- Not a trading bot — read-only analysis, no order placement.
+- Not a trading bot — read-only analysis, no order placement, and no
+  "trade this" link. DreamDEX itself has no public trading web app to
+  link to (its own docs describe it as liquidity infrastructure for
+  third parties to build a frontend on top of — verified by checking,
+  not assumed); a fabricated deep-link URL would be a broken link, which
+  this project treats as a real bug, not a missing feature.
+- Not a live-updating dashboard. The report is a snapshot from the most
+  recent run — `npm run mispricing-report-v5` (or the current latest
+  script) followed by a commit/push is what refreshes it. A true
+  auto-refreshing version would need either a scheduled job holding
+  `PRIVATE_KEY` in CI secrets, or every visitor paying their own Somnia
+  Agent calls from their own wallet — both are larger scope changes than
+  the remaining time before this hackathon's deadline could responsibly
+  absorb without introducing an untested new failure mode.
 - The naive/LLM probability estimates are not calibrated financial
   models; they exist to demonstrate a verifiable on-chain AI signal,
-  not to be traded on directly.
+  not to be traded on directly. `ASSET_ANNUAL_VOLATILITY` in
+  v0.0.0.9's naive formula is an assumed constant, not fitted from real
+  price history.
 - Not audited — this is hackathon/testnet code.
 
 ## Links

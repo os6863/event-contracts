@@ -1,8 +1,8 @@
 {
   "name": "event-contracts-mispricing-detector",
-  "version": "0.0.0.5",
+  "version": "0.0.0.10",
   "private": true,
-  "description": "Mispricing & Edge Detector for DreamDEX Event Contracts — compares DreamDEX's implied probability against an independent, on-chain Somnia Agent (LLM) estimate. Somnia x DreamDEX Hackathon.",
+  "description": "Mispricing & Edge Detector for DreamDEX Event Contracts \u00e2\u20ac\u201d compares DreamDEX's implied probability against an independent, on-chain Somnia Agent (LLM) estimate. Somnia x DreamDEX Hackathon.",
   "type": "module",
   "scripts": {
     "scan": "tsx \"v0.0.0.1/market-scanner.ts\"",
@@ -11,7 +11,14 @@
     "mispricing-detector": "tsx \"v0.0.0.3/mispricing-detector.ts\"",
     "mispricing-detector-v2": "tsx \"v0.0.0.4/mispricing-detector.ts\"",
     "mispricing-report": "tsx \"v0.0.0.5/mispricing-report.ts\"",
-    "mispricing-report-v2": "tsx \"v0.0.0.7/mispricing-report.ts\""
+    "mispricing-report-v2": "tsx \"v0.0.0.7/mispricing-report.ts\"",
+    "mispricing-report-v3": "tsx \"v0.0.0.8/mispricing-report.ts\"",
+    "mispricing-report-v4": "tsx \"v0.0.0.9/mispricing-report.ts\"",
+    "check-outcomes": "tsx \"v0.0.0.10/check-outcomes.ts\"",
+    "mispricing-report-v5": "tsx \"v0.0.0.10/mispricing-report.ts\"",
+    "render-report": "tsx \"v0.0.0.10/mispricing-report.ts\" --render-only",
+    "test": "tsx --test \"v0.0.0.10/tests.test.ts\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@somnia-chain/markets-sdk": "^0.29.0",

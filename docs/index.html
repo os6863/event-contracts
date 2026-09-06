@@ -1,668 +1,433 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mispricing &amp; Edge Detector — Report</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0f1420;
-    --panel: #171e2e;
-    --panel-flagged: #1f1a14;
-    --panel-weak: #171d29;
-    --border: #2a3346;
-    --border-flagged: #4a3a1c;
-    --border-weak: #33405a;
-    --text: #e8e5dc;
-    --muted: #8993a8;
-    --amber: #e0a93a;
-    --teal: #4fa394;
-    --blue: #6e8fd1;
-    --violet: #9b8cd1;
-    --down: #d16e6e;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'IBM Plex Mono', monospace;
-    padding: 48px 24px 80px;
-  }
-  .wrap { max-width: 760px; margin: 0 auto; }
-  .masthead { margin-bottom: 40px; }
-  .masthead h1 {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700;
-    font-size: 2rem;
-    margin: 0 0 8px;
-    letter-spacing: -0.01em;
-  }
-  .masthead p { color: var(--muted); margin: 0; font-size: 0.9rem; }
-  .summary {
-    display: flex;
-    gap: 24px;
-    margin-top: 24px;
-    padding: 16px 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-  }
-  .summary-item .n { font-size: 1.4rem; font-weight: 600; }
-  .summary-item .label { color: var(--muted); font-size: 0.78rem; display: block; }
-  .summary-item .n.amber { color: var(--amber); }
-  .summary-item .n.violet { color: var(--violet); }
-
-  .tickets { display: flex; flex-direction: column; gap: 16px; }
-  .ticket {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--border);
-    border-radius: 4px;
-    padding: 20px 24px;
-  }
-  .ticket--flagged {
-    background: var(--panel-flagged);
-    border-color: var(--border-flagged);
-    border-left-color: var(--amber);
-  }
-  .ticket--weak {
-    background: var(--panel-weak);
-    border-color: var(--border-weak);
-    border-left-color: var(--violet);
-  }
-  .ticket-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-  .ticket-asset { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.04em; }
-  .ticket-symbol {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.05rem;
-    margin: 2px 0 0;
-    font-weight: 500;
-    word-break: break-word;
-  }
-  .flag-badge {
-    border-radius: 3px;
-    padding: 3px 8px;
-    font-size: 0.72rem;
-    white-space: nowrap;
-    border: 1px solid transparent;
-  }
-  .flag-badge--strong {
-    background: rgba(224, 169, 58, 0.15);
-    color: var(--amber);
-    border-color: rgba(224, 169, 58, 0.4);
-  }
-  .flag-badge--weak {
-    background: rgba(155, 140, 209, 0.12);
-    color: var(--violet);
-    border-color: rgba(155, 140, 209, 0.35);
-  }
-  .ticket-question { color: var(--muted); font-size: 0.85rem; margin: 12px 0 16px; }
-
-  .stat-row { display: flex; gap: 28px; margin-bottom: 16px; }
-  .stat { display: flex; flex-direction: column; }
-  .stat-label { color: var(--muted); font-size: 0.7rem; margin-bottom: 2px; }
-  .stat-value { font-size: 0.95rem; font-weight: 500; }
-  .stat-value--down { color: var(--down); }
-  .stat-value--up { color: var(--teal); }
-
-  .bars { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
-  .bar-row { display: flex; align-items: center; gap: 10px; }
-  .bar-row--ensemble { padding-top: 4px; border-top: 1px dashed var(--border); }
-  .bar-label { width: 70px; font-size: 0.72rem; color: var(--muted); flex-shrink: 0; }
-  .bar-track { flex: 1; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 4px; }
-  .bar-fill--market { background: var(--blue); }
-  .bar-fill--naive { background: #6e9fd1; opacity: 0.6; }
-  .bar-fill--ai { background: var(--teal); }
-  .bar-fill--ensemble { background: var(--violet); }
-  .bar-value { width: 56px; text-align: right; font-size: 0.78rem; color: var(--text); flex-shrink: 0; }
-
-  .divergence { display: flex; gap: 8px; align-items: baseline; margin-bottom: 8px; }
-  .divergence-label { color: var(--muted); font-size: 0.72rem; }
-  .divergence-value { font-size: 1rem; font-weight: 600; color: var(--teal); }
-  .divergence--flagged .divergence-value { color: var(--amber); }
-
-  .reasoning {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.78rem;
-    line-height: 1.5;
-    color: var(--muted);
-    border-left: 2px solid var(--border);
-    padding-left: 12px;
-    margin: 12px 0 0;
-  }
-  .reasoning--muted { font-style: italic; }
-  .reasoning-details { margin-top: 12px; }
-  .reasoning-details summary {
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 0.75rem;
-    letter-spacing: 0.02em;
-    list-style: none;
-  }
-  .reasoning-details summary::-webkit-details-marker { display: none; }
-  .reasoning-details summary::before { content: "▸ "; }
-  .reasoning-details[open] summary::before { content: "▾ "; }
-  .reasoning-details .reasoning { margin-top: 8px; max-height: 260px; overflow-y: auto; white-space: pre-wrap; }
-  .ticket-note { color: var(--muted); font-size: 0.85rem; font-style: italic; margin: 0; }
-
-  .history { margin-top: 48px; }
-  .history h2 {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 1.15rem;
-    font-weight: 500;
-    margin: 0 0 8px;
-  }
-  .history-note { color: var(--muted); font-size: 0.78rem; margin: 0 0 16px; line-height: 1.5; }
-  .history-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-  .history-table th {
-    text-align: left;
-    color: var(--muted);
-    font-weight: 500;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border);
-  }
-  .history-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
-  .history-row--flagged td:last-child { color: var(--amber); }
-
-  footer { margin-top: 48px; color: var(--muted); font-size: 0.75rem; text-align: center; }
-</style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="masthead">
-      <h1>Mispricing &amp; Edge Detector</h1>
-      <p>DreamDEX Event Contracts vs. an ensemble of a naive baseline and a Somnia Agent (LLM Inference) — Somnia Shannon Testnet — generated 2026-09-06 16:59:48 UTC</p>
-      <div class="summary">
-        <div class="summary-item"><span class="n">4</span><span class="label">markets scanned</span></div>
-        <div class="summary-item"><span class="n amber">1</span><span class="label">strong signal (both estimates agree)</span></div>
-        <div class="summary-item"><span class="n ">0</span><span class="label">weak signal (one estimate only)</span></div>
-      </div>
-    </div>
-    <div class="tickets">
-      
-    <article class="ticket">
-      <header class="ticket-header">
-        <div>
-          <span class="ticket-asset">ETH</span>
-          <h2 class="ticket-symbol">ETH-0-06SEP26-2000/tUSDC#YES</h2>
-        </div>
-        
-      </header>
-      <p class="ticket-question">ETH closes at or above its opening price</p>
-      <div class="stat-row">
-        <div class="stat"><span class="stat-label">opening</span><span class="stat-value">$2480.20</span></div>
-        <div class="stat"><span class="stat-label">current</span><span class="stat-value">$2483.42</span></div>
-        <div class="stat"><span class="stat-label">move</span><span class="stat-value stat-value--up">+0.13%</span></div>
-      </div>
-      
-      <div class="bars">
-        <div class="bar-row">
-          <span class="bar-label">DreamDEX</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--market" style="width:61.9%"></div></div>
-          <span class="bar-value">0.6195</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">Naive</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--naive" style="width:51.0%"></div></div>
-          <span class="bar-value">0.5104</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">LLM est.</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ai" style="width:55.0%"></div></div>
-          <span class="bar-value">0.5500</span>
-        </div>
-        <div class="bar-row bar-row--ensemble">
-          <span class="bar-label">Ensemble</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ensemble" style="width:53.0%"></div></div>
-          <span class="bar-value">0.5302</span>
-        </div>
-      </div>
-      <div class="divergence ">
-          <span class="divergence-label">ensemble divergence</span>
-          <span class="divergence-value">-0.0893</span>
-        </div>
-      <details class="reasoning-details">
-          <summary>AI reasoning</summary>
-          <p class="reasoning">Okay, let's tackle this problem step by step. The user wants the probability that ETH closes at or above its opening price of $2480.20, given the current price is $2483.42, which is a +0.13% move. The time remaining is 184.2 minutes.
-
-First, I need to recall the calibration anchors provided. The anchors are for different percentage moves and their corresponding probabilities. For a positive move, the probabilities are above 5000, and for negative, below. But here, the move is +0.13%, which is less than the +0.25% anchor. 
-
-The anchors for +0.25% are 6000-6500. Since 0.13% is less than 0.25%, the probability should be lower than those values. But how much lower? Maybe interpolate between 0.00% (5000) and 0.25% (6000-6500). 
-
-But wait, the user mentioned that the time remaining affects the estimate. More time left means more room to reverse, so pull closer to 5000. The time here is 184.2 minutes, which is about 3 hours. That's a short window, but maybe not extremely short. However, the instruction says to adjust for time remaining. Since there's some time left, but not a lot, maybe the probability isn't too close to 5000. 
-
-But the current move is +0.13%, which is a small positive move. The anchors for +0.25% start at 6000. So maybe for +0.13%, it's somewhere between 5000 and 6000. Let's think: 0.13% is about half of 0.25% (which is 0.25). So maybe the probability is halfway between 5000 and 6000? That would be 5500. But the anchors for +0.25% are 6000-6500, so maybe the lower end is 6000. But since the move is smaller, maybe 5500 is a good estimate. However, the user said not to just default to 5000, so need to adjust based on the move. 
-
-But also, the time remaining. Since there's 184 minutes left, which is a bit more than 3 hours. The problem says that more time left means more room to reverse, so pull the estimate closer to 5000. So even though the current move is positive, the time left might reduce the probability. So maybe the base estimate without time consideration is around 5500, but adjusting for time, we might bring it down. 
-
-But how much? The anchors don't specify time adjustments, but the user says to adjust for time. For example, if the time was very short, you'd lean closer to the anchor. Here, 184 minutes is a moderate time. Maybe the adjustment isn't too extreme. Let's say the base is 5500, and then adjust based on time. But how? 
-
-Alternatively, maybe the time adjustment is already factored into the anchors. Wait, the user says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot; 
-
-So in this case, since there's 184 minutes left, which is not very little, but not a lot. So we need to pull the estimate closer to 5000 compared to if there was less time. But the current move is +0.13%, which is a small positive. 
-
-So perhaps the base probability (without time adjustment) would be between 5000 and 6000. Let's say 5500. Then, because there's some time left, we adjust towards 5000. How much? Maybe 5500 minus some percentage. But without specific rules, it's hard. 
-
-Alternatively, think of the time as a factor. If the time was zero, the probability would be the anchor. But with time, it's adjusted. For example, if the time was very short, say 5 minutes, you might be closer to the anchor. But with 184 minutes, maybe a moderate adjustment. 
-
-Alternatively, since the move is +0.13%, which is less than +0.25%, maybe the probability is around 5500. But considering the time, maybe 5300? Or 5400? 
-
-But the user said not to just default to 5000, so need to find a balance. Maybe the answer is 5500. But I'm not sure. Let me check the anchors again. 
-
-For +0.25% move, the probability is 6000-6500. So for a smaller move, say 0.13%, maybe 5500? But the user says to interpolate between the anchors. So between 0.00% (5000) and 0.25% (6000-6500). So if I take 0.13% as 52% of 0.25% (since 0.13/0.25 = 0.52), then the probability would be 5000 + 0.52*(6000-5000) = 5000 + 520 = 5520. So approximately 5520. 
-
-But then adjust for time. Since there's 184 minutes left, which is more than a short time, so pull closer to 5000. Let's say reduce by 10%, so 5520 * 0.9 = 4968. But that would be below 5000. But the user said that negative moves must be below 5000, but positive moves can be above. However, adjusting towards 5000 for positive moves. So maybe 5520 - (some amount). 
-
-Alternatively, maybe the time adjustment is a separate factor. For example, if the time was 0, the probability is the anchor. If the time is longer, it's adjusted towards 5000. But without a specific formula, it's tricky. 
-
-Given the ambiguity, perhaps the best approach is to take the interpolated value between 0.00% and 0.25% (which is 5500) and then adjust for time. Since 184 minutes is a moderate time, maybe reduce it by 10% to 5500 - 550 = 4950. But that would be 4950, which is just below 5000. But the user says that negative moves must be below 5000, but this is a positive move. However, the time adjustment could bring it closer to 5000. 
-
-Alternatively, maybe the time adjustment is not as significant. If the time is 184 minutes, which is about 3 hours, maybe it's considered a short window, so the adjustment is minimal. Therefore, the probability remains around 5500. 
-
-But I need to make a decision. Given the current move is +0.13%, which is between 0.00% and 0.25%, and the time is 184 minutes. The anchors suggest that for +0.25%, it's 6000-6500. So for +0.13%, maybe 5500. But considering time, maybe 5300? 
-
-Alternatively, maybe the time adjustment is already considered in the anchors. The user says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;. So if there's more time, the probability is closer to 5000. So if the time was very short, you'd be closer to the anchor. 
-
-But in this case, since the time is 184 minutes, which is not very short, maybe the adjustment is not too much. So the base probability is 5500, and the adjustment is minimal. So maybe 5500. 
-
-But I'm not sure. Another way: if the time was 0, the probability would be the anchor. For example, if the window closed immediately, the probability would be based on the current move. But since there's time left, the probability is adjusted. 
-
-But how to quantify that? Maybe the time remaining affects the volatility. A longer time allows for more movement, so the probability of reversing is higher. So for a positive move, with more time, the probability of closing above the open is lower (since there's more time to reverse). So the estimate should be pulled towards 5000. 
-
-So for the current move of +0.13%, which would have a base probability of, say, 5500, but with 184 minutes left, we need to adjust it. 
-
-Assuming that the time is a factor that reduces the probability. Let's say that for each hour, the probability decreases by a certain amount. But without specific data, this is guesswork. 
-
-Alternatively, think of it as a 3-hour window. If the market is volatile, over 3 hours, the price could move up or down. So the probability might be around 5500, but adjusted down. 
-
-But given the lack of specific rules, I'll go with the interpolated value of 5500. However, considering the time, maybe 5300. 
-
-Alternatively, since the move is +0.13%, which is very small, maybe the probability is slightly above 5000. But the anchors for 0.00% is 5000. So maybe 5100? But that seems too low. 
-
-Wait, the user says &quot;interpolate between them, and do not simply default to 5000 whenever the move is nonzero.&quot; So for a small positive move, the probability should be slightly above 5000. But the anchor for +0.25% is 6000-6500. So for 0.13%, which is 52% of 0.25%, the probability would be 5000 + 52%*(6000-5000) = 5000 + 520 = 5520. So 5520. 
-
-Then, considering the time remaining. If the time is 184 minutes, which is 3 hours. If the time was zero, the probability would be 5520. But with time, it's adjusted towards 5000. How much? Maybe a linear adjustment. Suppose that for each hour, the probability decreases by, say, 100 points. So 3 hours would decrease by 300, making it 5520 - 300 = 5220. But this is arbitrary. 
-
-Alternatively, think of it as the probability being 5520 multiplied by a factor based on time. But without a formula, it's hard. 
-
-Alternatively, since the time is 184 minutes, which is about 3 hours, and given that the market is volatile, maybe the adjustment is not too large. So maybe 5500 is acceptable. 
-
-But I need to pick a number. Given the information, I'll go with 5500 as the interpolated value and not adjust much for time, since the move is small and the time is moderate. So the final answer is 5500.</p>
-        </details>
-    </article>
-
-    <article class="ticket">
-      <header class="ticket-header">
-        <div>
-          <span class="ticket-asset">BTC</span>
-          <h2 class="ticket-symbol">BTC-0-06SEP26-2000/tUSDC#YES</h2>
-        </div>
-        
-      </header>
-      <p class="ticket-question">BTC closes at or above its opening price</p>
-      <div class="stat-row">
-        <div class="stat"><span class="stat-label">opening</span><span class="stat-value">$79714.20</span></div>
-        <div class="stat"><span class="stat-label">current</span><span class="stat-value">$79705.00</span></div>
-        <div class="stat"><span class="stat-label">move</span><span class="stat-value stat-value--down">-0.01%</span></div>
-      </div>
-      
-      <div class="bars">
-        <div class="bar-row">
-          <span class="bar-label">DreamDEX</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--market" style="width:45.0%"></div></div>
-          <span class="bar-value">0.4495</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">Naive</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--naive" style="width:49.9%"></div></div>
-          <span class="bar-value">0.4991</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">LLM est.</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ai" style="width:49.5%"></div></div>
-          <span class="bar-value">0.4950</span>
-        </div>
-        <div class="bar-row bar-row--ensemble">
-          <span class="bar-label">Ensemble</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ensemble" style="width:49.7%"></div></div>
-          <span class="bar-value">0.4970</span>
-        </div>
-      </div>
-      <div class="divergence ">
-          <span class="divergence-label">ensemble divergence</span>
-          <span class="divergence-value">+0.0475</span>
-        </div>
-      <details class="reasoning-details">
-          <summary>AI reasoning</summary>
-          <p class="reasoning">Okay, let's tackle this problem step by step. The user wants to estimate the probability that BTC closes at or above its opening price, given the current price and time remaining. 
-
-First, I need to note the key data points. The opening price is $79,714.20, and the current price is $79,705.00. That's a decrease of $9.20. To find the percentage change, I'll calculate (-9.20 / 79,714.20) * 100. Let me do that: 9.20 divided by 79,714.20 is approximately 0.0001154, so multiplying by 100 gives about -0.01154%, which the user rounded to -0.01%. So the price has moved down by 0.01% since opening.
-
-Next, the time remaining is 184.2 minutes. The user mentioned that more time left means more room for the price to reverse, so the estimate should be closer to 5000. But since the move is negative, the probability should be below 5000. The calibration anchors provided for negative moves are: -0.25% -&gt; 3500-4000, -0.50% -&gt; 2200-3000, -1.00% -&gt; 500-1500. 
-
-But here, the move is -0.01%, which is much smaller than -0.25%. So I need to interpolate between the 0.00% move (5000) and the -0.25% move (3500-4000). Since -0.01% is 0.01% below the opening, which is a very small move. The question is how much to adjust from 5000 towards the lower end.
-
-The user said to interpolate between the anchors. Let's think about the scale. From 0.00% (5000) to -0.25% (say, 3750 as a midpoint of 3500-4000), a 0.25% move corresponds to a drop from 5000 to 3750. So each 0.01% move would correspond to a decrease of (5000 - 3750)/25 = 50 points per 0.01%. Wait, 0.25% is 25 intervals of 0.01%. So 5000 - 3750 = 1250 points over 25 intervals, which is 50 points per 0.01%. 
-
-But the current move is -0.01%, so that's 1 interval. So subtract 50 from 5000, giving 4950. However, the user mentioned that the anchors are approximate and to interpolate between them. But maybe the exact calculation isn't linear. Alternatively, since the move is very small, maybe the probability is slightly below 5000, but how much?
-
-Alternatively, considering that the calibration for -0.25% is 3500-4000. Let's take the midpoint of that range as 3750. So from 0.00% (5000) to -0.25% (3750), the difference is 1250 over 0.25%. So per 0.01%, it's 1250 / 25 = 50. So for -0.01%, it's 5000 - 50 = 4950. But maybe the user wants a more conservative estimate, considering that even a small move might have some impact. However, since the time remaining is 184 minutes, which is about 3 hours. The user said that more time left means more room to reverse, so the probability should be closer to 5000. But since the current move is negative, it's still below 5000.
-
-But the move is only -0.01%, which is very minimal. So maybe the probability is just slightly below 5000. However, the calibration anchors don't have a specific point for -0.01%, so interpolation is needed. Let me check the given anchors again:
-
-For negative moves:
--0.00% -&gt; 5000
--0.25% -&gt; 3500-4000
-So between 0.00% and -0.25%, the probability decreases from 5000 to 3500-4000. Since the move is -0.01%, which is 0.01% below 0.00%, we can calculate how much of the way from 0.00% to -0.25% this is. The total range is 0.25%, and 0.01% is 4% of that (0.01/0.25 = 0.04). So the probability would decrease by 4% of the total range from 5000 to 3750 (midpoint of 3500-4000). The total range is 1250 (5000-3750). 4% of 1250 is 50. So subtract 50 from 5000, giving 4950. 
-
-But maybe the user expects a different approach. Alternatively, since the move is so small, maybe the probability is close to 5000, but slightly less. However, the exact interpolation would be 4950. But I need to check if there's any other factors. The time remaining is 184 minutes, which is a bit over 3 hours. The user said that more time left means more room to reverse, so the probability should be pulled closer to 5000. However, since the current move is negative, even with more time, the probability is still below 5000. 
-
-But how does the time affect the probability? The user mentioned that the time remaining affects the estimate. For example, if there's more time, the estimate is closer to 5000. But in this case, the move is -0.01%, so the base probability is slightly below 5000. However, with 184 minutes left, which is a significant amount of time, maybe the probability is higher than if there was less time. 
-
-Wait, the user said: &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it&quot;. So if there's more time, the estimate is closer to 5000. But the current move is -0.01%, so the base anchor would be something like 4950 (as calculated earlier), but with more time, we adjust it closer to 5000. 
-
-But how much? The user hasn't provided specific time adjustments, only the move percentages. So perhaps the time adjustment is already factored into the anchors? Or maybe the time is a separate factor. 
-
-Wait, the original instruction says: &quot;Use these approximate calibration anchors... adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it&quot;. So the time adjustment is an additional factor. 
-
-So the process is: first, find the base probability based on the move, then adjust it based on time. 
-
-In this case, the move is -0.01%, which is between 0.00% and -0.25%. The base probability would be between 5000 and 3500-4000. Let's take the midpoint of 3500-4000 as 3750. So the base probability for -0.25% is 3750. The move is -0.01%, which is 0.01% / 0.25% = 4% of the way from 0.00% to -0.25%. So the base probability would be 5000 - (4% of (5000 - 3750)) = 5000 - (4% of 1250) = 5000 - 50 = 4950. 
-
-Now, adjust for time. Since there's 184 minutes left, which is a lot of time, so we pull the estimate closer to 5000. How much closer? The user hasn't given specific rules, but maybe we can assume that the time adjustment is proportional. However, without specific data, it's hard to quantify. 
-
-Alternatively, since the time is 184 minutes, which is a long time, maybe the probability is significantly closer to 5000. But how much? For example, if the time was very short, say 1 minute, we might not adjust much, but with 184 minutes, maybe we adjust a lot. 
-
-But without specific rules, this is tricky. The user might expect that the time adjustment is already considered in the anchors, or that the time is a separate factor. However, since the user hasn't provided specific time-based adjustments, maybe the main factor is the move, and the time is just a note to not default to 5000. 
-
-Alternatively, perhaps the time is a factor in the interpolation. For example, if the time is longer, the probability is closer to 5000. So for the same move, more time would mean higher probability. 
-
-In this case, the base probability is 4950, but with more time, we adjust it upwards. How much? Maybe a small amount. For example, if the time is 184 minutes, which is a long time, maybe we add 50 points, making it 5000. But that seems too much. Alternatively, since the move is so small, maybe the time adjustment is minimal. 
-
-But the user said &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;. So the base probability is 4950, and with more time, we pull it closer to 5000. How much? Let's say that for every hour, we adjust by a certain amount. But without specific data, this is guesswork. 
-
-Alternatively, maybe the time adjustment is not needed because the move is already accounted for. But the user explicitly says to adjust for time. 
-
-Given that, perhaps the time adjustment is to take the base probability and move it towards 5000. For example, if the base is 4950, and with a long time, maybe we add 25 to make it 4975. But this is arbitrary. 
-
-Alternatively, since the move is so small (-0.01%), the probability is very close to 5000, but slightly below. Maybe 4990 or something. But without specific rules, it's hard. 
-
-Given that the user's instruction says to interpolate between the anchors and not default to 5000, but with the time adjustment, maybe the final answer is 4950, considering that the time is long enough to allow reversal but the move is very small. However, since the time is long, maybe the probability is higher than 4950. 
-
-But without specific time-based calibration, it's hard to say. The user might expect that the time adjustment is already considered in the anchors, but I'm not sure. 
-
-Alternatively, maybe the time is not a factor here because the move is so small. For example, even with a long time, a -0.01% move is negligible, so the probability is almost 5000. But the user said that a negative move must always give an estimate below 5000. So even with a long time, it's still below 5000. 
-
-In that case, maybe the answer is 4950. But perhaps the user expects a different approach. 
-
-Alternatively, think about the volatility of BTC. A 0.01% move is very small, so the probability of reversing is high. So even with a small negative move, the probability is close to 5000. Maybe 4990 or 4980. But how to translate that into the given anchors. 
-
-The given anchors for negative moves start at -0.25% (3500-4000). So -0.01% is much closer to 0.00% than to -0.25%. So the probability should be very close to 5000. Maybe 4990. But how to calculate that. 
-
-If we consider that from 0.00% (5000) to -0.25% (say 3750), the difference is 1250 over 0.25%. So per 0.01%, it's 50 points. So for -0.01%, it's 5000 - 50 = 4950. But with time, we adjust closer to 5000. Let's say that with 184 minutes, which is a long time, we adjust by, say, 25 points, making it 4975. But again, this is arbitrary. 
-
-But the user might not expect such a detailed adjustment. Maybe the time adjustment is already considered in the initial interpolation. Alternatively, the time is a red herring, and the main factor is the move. 
-
-Given that the user said &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;, but the move is already a small negative. So the base is 4950, and with more time, we pull it closer to 5000. How much? If the time is 184 minutes, which is a lot, maybe we pull it by half the distance. The distance from 4950 to 5000 is 50. Half would be 25, so 4975. 
-
-But again, without specific rules, this is speculative. However, given the instructions, the answer should be an integer between 0 and 10000. Considering that the move is -0.01%, which is very small, and the time is long, the probability should be just slightly below 5000. 
-
-But according to the interpolation, it's 4950. However, if we adjust for time, maybe it's 4975. But how to decide. 
-
-Alternatively, since the move is -0.01%, which is 0.01% below the opening, and the time is 184 minutes, which is a long time, the probability is 5000 minus some small value. Maybe 5000 - 50 = 4950, but with time, we add back a bit. 
-
-But the user's instruction says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;. So the base is 4950, and with more time, we move it towards 5000. Let's say we move it by 20%, so 4950 + (50 * 0.2) = 4950 + 10 = 4960. But again, this is arbitrary. 
-
-Given the uncertainty, but needing to provide an answer, I'll go with the initial interpolation of 4950, considering that the time adjustment might not be significant enough to change it much. Alternatively, if the time adjustment is considered, maybe 4975. But since the user didn't provide specific time-based anchors, it's safer to stick with the move-based interpolation. 
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="EdgeScope compares DreamDEX event-contract probabilities with independent Somnia Agent estimates. A verifiable testnet analytics snapshot."><meta name="color-scheme" content="dark"><title>EdgeScope — DreamDEX Signal Intelligence</title><style>
+:root{color-scheme:dark;--bg:#07090d;--panel:#0d121a;--panel2:#111824;--border:#263344;--text:#f4f7fb;--muted:#a0adbe;--green:#4fe0a7;--yellow:#f0be55;--red:#ff8798;--blue:#8bb6ff;--cyan:#58d9ef}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:90px}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.6}a{color:inherit;text-decoration:none}a:hover{color:var(--green)}button,a,summary{touch-action:manipulation}a,button,summary{transition:background .18s,color .18s,border-color .18s}button{font:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--cyan);outline-offset:4px}[hidden]{display:none!important}.wrap{width:min(1200px,calc(100% - 64px));margin:auto}.skip{position:absolute;top:-100px;left:16px;background:var(--green);color:#07150f;padding:12px;z-index:10}.skip:focus{top:10px}header{position:sticky;top:0;z-index:5;background:rgba(7,9,13,.96);border-bottom:1px solid var(--border)}.header-inner{height:80px;display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{display:flex;align-items:center;gap:11px;min-height:44px}.brand-mark{height:36px;width:36px;border:1px solid #335a50;border-radius:10px;background:#10201d;display:grid;place-items:center;color:var(--green)}.brand strong{display:block;font-size:21px;letter-spacing:-.7px;line-height:1.2}.brand small{display:block;color:var(--muted);font-size:11px;letter-spacing:.3px}.nav{display:flex;align-items:center;gap:28px;font-size:13px}.network{color:var(--muted)}.dot{width:6px;height:6px;background:var(--green);border-radius:50%;display:inline-block;margin-right:8px}.btn{display:inline-flex;justify-content:center;align-items:center;gap:18px;min-height:44px;padding:11px 19px;border-radius:7px;border:1px solid var(--border);font-size:13px;font-weight:600;background:var(--panel2)}.btn:hover{border-color:var(--green)}.btn.primary{background:var(--green);color:#092016;border-color:var(--green)}.btn.primary:hover{background:#78edbd}.hero{display:grid;grid-template-columns:1.12fr 1fr;gap:64px;align-items:center;padding:76px 0 52px}.eyebrow{font-size:11px;font-weight:650;letter-spacing:1.6px;color:var(--muted);text-transform:uppercase}.hero .eyebrow{color:var(--green)}h1{font-size:clamp(36px,4.1vw,56px);line-height:1.09;letter-spacing:-2.4px;margin:22px 0}h1 em{font-style:normal;color:var(--green)}.hero-copy>p{font-size:15px;color:var(--muted);max-width:500px;line-height:1.85}.actions{display:flex;gap:12px;margin:28px 0 18px}.hero-note{font-size:12px!important;display:flex;align-items:center;gap:8px}.edge-panel{background:linear-gradient(145deg,#10221d 0%,#0d151c 46%,#101624 100%);border:1px solid #2b4a42;border-radius:14px;padding:27px;position:relative}.edge-head{display:flex;justify-content:space-between;align-items:center;gap:16px}.edge-head .eyebrow{color:#bbd1c8}.badge{font-size:10px;font-weight:650;letter-spacing:.6px;text-transform:uppercase;padding:5px 9px;border:1px solid #354155;border-radius:5px;color:#bac5d5;white-space:nowrap;display:inline-block}.badge.strong{color:var(--green);border-color:#315a4c;background:#112820}.badge.weak{color:var(--yellow);border-color:#64502c;background:#292216}.edge-number{font-size:64px;font-weight:650;letter-spacing:-3px;line-height:1.2;margin:30px 0 5px;color:var(--green);overflow-wrap:anywhere}.edge-number small{font-size:22px;letter-spacing:-.4px;color:#b0c1b9}.edge-subtitle{font-size:13px;color:var(--muted);margin:0 0 20px}.edge-data{display:grid;grid-template-columns:1fr 1fr;gap:20px;border-top:1px solid #294037;padding-top:20px}.edge-data span,.kpi span,.market-metrics span,.score-grid span{display:block;font-size:12px;color:var(--muted)}.edge-data b{font-size:21px;font-weight:550}.edge-foot{font-size:12px;margin-top:23px;padding-top:16px;border-top:1px solid #294037;color:#c1d7cb}.snapshot-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;color:var(--muted);font-size:12px;margin-bottom:20px}.snapshot-bar time{color:#c1cbda}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:64px}.kpi{border:1px solid var(--border);border-radius:9px;background:var(--panel);padding:20px 24px}.kpi strong{display:block;font-size:31px;font-weight:550;line-height:1.4;margin:5px 0}.kpi small{font-size:11px;color:var(--muted)}.green{color:var(--green)}.yellow{color:var(--yellow)}.blue,.positive{color:var(--blue)}.negative{color:var(--red)}section{margin:0 0 64px}.section-heading{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:12px}h2{font-size:26px;letter-spacing:-.9px;line-height:1.3;margin:7px 0}h3{font-size:16px;line-height:1.5;margin:3px 0;font-weight:560}.section-intro{color:var(--muted);font-size:14px;margin:8px 0 25px;max-width:750px}.filters{display:flex;gap:4px;padding:4px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}.filters button{border:1px solid transparent;border-radius:5px;color:var(--muted);background:none;min-height:44px;padding:8px 14px;font-size:12px}.filters button[aria-pressed=true]{color:var(--text);background:#233043;border-color:#35465f}.filters button:hover{color:var(--text);background:#182230}.board{display:grid;grid-template-columns:1fr 1fr;gap:20px}.signal-card{min-width:0;background:var(--panel);border:1px solid var(--border);border-radius:11px;overflow:hidden}.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:23px 23px 0}.identity{display:flex;gap:12px;min-width:0}.identity h3{overflow-wrap:anywhere}.identity .eyebrow{font-size:10px;letter-spacing:1px}.asset-icon{flex-shrink:0;width:35px;height:35px;display:grid;place-items:center;background:#2b2215;color:#ffc773;border:1px solid #514028;border-radius:50%;font-size:23px;line-height:1}.asset-icon.eth{color:#b9c6ff;background:#1b2241;border-color:#36436a}.symbol{font-size:11px;font-family:ui-monospace,Consolas,monospace;color:var(--muted);padding:0 23px;margin:9px 0 20px;overflow-wrap:anywhere}.market-metrics{display:grid;grid-template-columns:1fr 1fr 1fr;padding:0 23px;gap:12px}.market-metrics strong{font-size:23px;font-weight:550;letter-spacing:-.5px;white-space:nowrap}.market-metrics span{font-size:10px}.comparison{padding:22px 23px 10px}.bar-row{display:flex;align-items:center;gap:12px;margin:9px 0;font-size:11px;color:var(--muted)}.bar-row>span{width:61px;flex-shrink:0}.bar-row>b{font-size:11px;min-width:49px;text-align:right;color:var(--text);font-weight:500}.bar-track{height:5px;background:#202b3a;border-radius:4px;flex:1;overflow:hidden}.bar-track i{display:block;height:100%;border-radius:4px}.market-bar{background:#8294b0}.ensemble-bar{background:var(--blue)}.assessment{font-size:12px;color:var(--muted);padding:0 23px 18px;margin:12px 0 0}.evidence,.reasoning{border-top:1px solid var(--border)}summary{cursor:pointer;min-height:48px;padding:14px 23px;font-size:12px;font-weight:550;list-style:none}summary::-webkit-details-marker{display:none}summary>span{float:right;color:var(--muted)}summary:hover{background:#131c29}.evidence-body{padding:0 23px 20px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}.evidence-body a{display:inline-block;min-height:44px;padding-top:12px;color:var(--blue)}.verification-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;margin:8px 0 22px}.verification-grid dt{font-size:11px}.verification-grid dd{margin:3px 0 0;color:var(--text);font-size:14px;font-variant-numeric:tabular-nums}.agent-status{color:var(--green)}.notice{border-left:2px solid var(--yellow);padding-left:12px;color:#e6ca8a}.analysis-summary{background:#101b28;padding:15px;border-radius:6px}.analysis-summary .eyebrow{font-size:9px;letter-spacing:.8px}.analysis-summary p{margin:10px 0}.raw{margin-top:14px}.raw summary{padding-left:0}.raw-text{max-height:320px;overflow:auto;white-space:pre-wrap;padding:16px;background:#090e15;border:1px solid var(--border);font-size:12px;line-height:1.8}.muted{color:var(--muted);font-size:12px}.subtle-tag{font-size:11px;color:var(--muted);border:1px solid var(--border);padding:6px 10px;border-radius:5px}.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--border)}.flow>div{padding:25px;background:var(--panel)}.step{display:flex;align-items:center;justify-content:space-between;color:var(--green);font-size:11px;font-family:ui-monospace,monospace;margin-bottom:22px}.flow h3{font-size:14px}.flow p{color:var(--muted);font-size:12px}.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}.timeline>div{border-left:2px solid #325445;padding-left:20px}.timeline b{color:var(--green);font-size:11px}.timeline h3{font-size:14px}.timeline p{color:var(--muted);font-size:12px}.history-shell{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel)}table{border-collapse:collapse;width:100%;font-size:12px;text-align:left}th{color:var(--muted);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.6px;background:#111824}td,th{padding:16px 18px;border-bottom:1px solid var(--border)}tr:last-child td{border-bottom:0}td:first-child{max-width:390px;overflow-wrap:anywhere}td b{font-size:11px;font-family:ui-monospace,monospace;font-weight:500}td small{display:block;font-size:10px;color:var(--muted);margin-top:4px}.track-record{border-top:1px solid var(--border);padding-top:35px}.score-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:620px}.score-grid>div{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:22px}.score-grid strong{display:block;font-size:34px;font-weight:550}.empty{padding:32px;border:1px dashed #3a485a;border-radius:9px;color:var(--muted);font-size:14px;background:var(--panel)}#filter-empty{margin-top:20px}footer{border-top:1px solid var(--border);padding:32px 0}.footer-top{display:flex;align-items:center;justify-content:space-between;gap:24px}.footer-links{display:flex;gap:24px;font-size:12px}footer p{max-width:820px;color:var(--muted);font-size:11px;margin:22px 0 0}.edge-number,.market-metrics strong,.kpi strong{font-variant-numeric:tabular-nums}
 
-So the final answer is 4950.</p>
-        </details>
-    </article>
+@media(min-width:1051px){.signal-card:hover{border-color:#3b506b}}
+@media(max-width:1050px){.hero{grid-template-columns:1fr;gap:30px;padding-top:45px}.hero-copy{max-width:650px}.hero-copy>p{max-width:600px}.edge-panel{max-width:650px}.kpis{grid-template-columns:1fr 1fr}.card-top{flex-wrap:wrap}.market-metrics{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr 1fr}.section-heading{align-items:flex-start;flex-direction:column}.nav{gap:16px}.network{display:none}}
+@media(max-width:760px){.wrap{width:calc(100% - 36px)}.header-inner{height:64px;gap:12px}.brand small{display:none}.nav .github-link{display:none}.hero{padding:38px 0 28px}.hero h1{letter-spacing:-1.5px}.hero-copy>p{font-size:14px}.board{grid-template-columns:1fr}.kpis{margin-bottom:40px}.snapshot-bar{align-items:flex-start;flex-direction:column;gap:5px}.filters{width:100%}.filters button{flex:1;padding:8px}.timeline{grid-template-columns:1fr;gap:20px}section{margin-bottom:42px}.market-metrics{grid-template-columns:repeat(3,1fr)}.card-top{flex-wrap:nowrap}.footer-top{align-items:flex-start;flex-direction:column}.history-shell thead{display:none}.history-shell table,.history-shell tbody,.history-shell tr,.history-shell td{display:block}.history-shell tr{padding:18px;border-bottom:1px solid var(--border)}.history-shell tr:last-child{border:0}.history-shell td{display:flex;justify-content:space-between;gap:16px;border:0;padding:6px 0;max-width:none}.history-shell td:first-child{display:block;margin-bottom:12px}.history-shell td:not(:first-child)::before{content:attr(data-label);color:var(--muted);font-size:11px}.history-shell td b{font-size:12px}.history-shell td small{font-size:11px}.flow{grid-template-columns:1fr 1fr}.edge-number{font-size:58px}}
+@media(max-width:460px){.wrap{width:calc(100% - 32px)}.brand{gap:8px}.brand strong{font-size:18px}.brand-mark{width:30px;height:30px}.nav .btn{padding:9px 12px;font-size:11px}.hero h1{font-size:38px}.actions{flex-direction:column}.edge-panel{padding:20px}.edge-head{align-items:flex-start;flex-direction:column;gap:10px}.edge-number{font-size:54px}.kpis{grid-template-columns:1fr;gap:10px}.kpi{padding:15px 20px}.kpi strong{font-size:27px}.card-top{flex-wrap:wrap;padding:20px 20px 0}.symbol{padding:0 20px}.market-metrics{grid-template-columns:1fr;padding:0 20px;gap:13px}.market-metrics>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.market-metrics span{font-size:11px}.market-metrics strong{font-size:24px}.verification-grid{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr}.score-grid{grid-template-columns:1fr}.edge-data b{font-size:19px}.filters button{font-size:11px}.footer-links{flex-wrap:wrap;gap:16px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important}}
+</style></head><body><a class="skip" href="#signals">Skip to signals</a>
+<header><div class="wrap header-inner"><a class="brand" href="#top" aria-label="EdgeScope home"><span class="brand-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 17L8 12L12 15L20 6M14 6H20V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>EdgeScope</strong><small>DreamDEX Signal Intelligence</small></span></a><nav class="nav" aria-label="Main navigation"><span class="network"><i class="dot"></i>Somnia Shannon Testnet</span><span class="github-link"><a href="https://github.com/os6863/event-contracts/" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a></span><a class="btn primary" href="#signals">View signals <span aria-hidden="true">↗</span></a></nav></div></header>
+<main id="top" class="wrap"><div class="hero"><div class="hero-copy"><span class="eyebrow">VERIFIABLE ON-CHAIN MARKET INTELLIGENCE</span><h1>See the market.<br><em>Find the disagreement.</em></h1><p>DreamDEX sets the probability. Independent price data and on-chain AI offer a second view. EdgeScope shows where they diverge — and the evidence behind every signal.</p><div class="actions"><a class="btn primary" href="#signals">Explore signals <span aria-hidden="true">↗</span></a><a class="btn" href="#methodology">How it works <span aria-hidden="true">↓</span></a></div><p class="hero-note"><i class="dot"></i>Testnet analytics · No order placement</p></div>
+<aside class="edge-panel" aria-label="Largest observed divergence"><div class="edge-head"><span class="eyebrow">LARGEST OBSERVED DIVERGENCE</span><span class="badge strong">Strong signal</span></div><div class="edge-number">36.19 <small>pts</small></div><p class="edge-subtitle">BTC · Ensemble below market</p><div class="edge-data"><div><span>DreamDEX</span><b>98.15%</b></div><div><span>Independent ensemble</span><b class="blue">61.96%</b></div></div><div class="edge-foot">2/2 estimators clear the threshold in the same direction</div></aside></div>
+<div class="snapshot-bar"><span>SNAPSHOT REPORT · v0.0.0.10</span><span>Generated <time datetime="2026-09-06T19:34:32.803Z">2026-09-06 19:34:32 UTC</time></span></div><p class="muted" style="margin-top:-10px;margin-bottom:22px">These are recorded observations, not streaming quotes. Market prices and trading status may have changed since this report was generated.</p>
+<div class="kpis"><div class="kpi"><span>Markets in this run</span><strong>06</strong><small>6 usable comparisons</small></div><div class="kpi"><span>Strong signals</span><strong class="green">05</strong><small>Both estimators clear the gate</small></div><div class="kpi"><span>Weak signals</span><strong class="yellow">00</strong><small>Incomplete estimator agreement</small></div><div class="kpi"><span>Trading mode</span><strong style="font-size:25px">Read-only</strong><small>No orders · agent computation uses testnet transactions</small></div></div>
+<section id="signals"><div class="section-heading"><div><span class="eyebrow">THE INDEPENDENT VIEW</span><h2>Opportunity board</h2></div><div class="filters" role="group" aria-label="Filter signals"><button type="button" data-filter="all" aria-pressed="true">All</button><button type="button" data-filter="strong" aria-pressed="false">Strong</button><button type="button" data-filter="weak" aria-pressed="false">Weak</button><button type="button" data-filter="none" aria-pressed="false">No signal</button></div></div><p class="section-intro">Ranked by signal class, then divergence. Strong requires both estimators to differ from DreamDEX by at least 15 points in the same direction.</p><div class="board"><article class="signal-card" data-signal="strong">
+    <div class="card-top"><div class="identity"><span class="asset-icon btc" aria-hidden="true">₿</span><div><span class="eyebrow">BTC / EVENT CONTRACT</span><h3>BTC closes at or above its opening price</h3></div></div><span class="badge strong">Strong signal</span></div>
+    <p class="symbol">BTC-0-06SEP26-2000-52DA/tUSDC#YES</p>
+    <div class="market-metrics"><div><span>DreamDEX</span><strong>98.15%</strong></div><div><span>Independent ensemble</span><strong class="blue">61.96%</strong></div><div><span>Ensemble divergence</span><strong class="negative">-36.19 pts</strong></div></div>
+    <div class="comparison"><div class="bar-row"><span>Market</span><div class="bar-track" aria-hidden="true"><i class="market-bar" style="width:98.15%"></i></div><b>98.15%</b></div><div class="bar-row"><span>Ensemble</span><div class="bar-track" aria-hidden="true"><i class="ensemble-bar" style="width:61.957394803416136%"></i></div><b>61.96%</b></div></div>
+    <p class="assessment">Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p>
+    <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
+    <div><dt>Opening price</dt><dd>$79,714.20</dd></div><div><dt>Agent price</dt><dd>$79,837.00</dd></div><div><dt>Price move</dt><dd>+0.15%</dd></div><div><dt>Naive baseline</dt><dd>64.91%</dd></div><div><dt>LLM estimate</dt><dd>59.00%</dd></div><div><dt>Time left at observation</dt><dd>28.1 min</dd></div></dl>
+    <p>Input snapshot: 2026-09-06 19:31:53 UTC<br>Price received: 2026-09-06 19:31:52 UTC<br>Market expiry: 2026-09-06 20:00:00 UTC</p>
+    <p class="agent-status">Successful agent receipt · final answer checked</p>
 
-    <article class="ticket ticket--flagged">
-      <header class="ticket-header">
-        <div>
-          <span class="ticket-asset">BTC</span>
-          <h2 class="ticket-symbol">BTC-0-07SEP26/tUSDC#YES</h2>
-        </div>
-        <span class="flag-badge flag-badge--strong">strong mispricing signal</span>
-      </header>
-      <p class="ticket-question">BTC closes at or above its opening price</p>
-      <div class="stat-row">
-        <div class="stat"><span class="stat-label">opening</span><span class="stat-value">$79830.95</span></div>
-        <div class="stat"><span class="stat-label">current</span><span class="stat-value">$79705.00</span></div>
-        <div class="stat"><span class="stat-label">move</span><span class="stat-value stat-value--down">-0.16%</span></div>
-      </div>
-      
-      <div class="bars">
-        <div class="bar-row">
-          <span class="bar-label">DreamDEX</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--market" style="width:29.9%"></div></div>
-          <span class="bar-value">0.2990</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">Naive</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--naive" style="width:48.7%"></div></div>
-          <span class="bar-value">0.4874</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">LLM est.</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ai" style="width:45.0%"></div></div>
-          <span class="bar-value">0.4500</span>
-        </div>
-        <div class="bar-row bar-row--ensemble">
-          <span class="bar-label">Ensemble</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ensemble" style="width:46.9%"></div></div>
-          <span class="bar-value">0.4687</span>
-        </div>
-      </div>
-      <div class="divergence divergence--flagged">
-          <span class="divergence-label">ensemble divergence</span>
-          <span class="divergence-value">+0.1697</span>
-        </div>
-      <details class="reasoning-details">
-          <summary>AI reasoning</summary>
-          <p class="reasoning">Okay, let's tackle this problem step by step. The user wants to estimate the probability that BTC closes at or above its opening price, given the current price and time remaining. 
 
-First, I need to note the key data points. The opening price is $79,830.95, and the current price is $79,705.00. The price change since opening is -0.16%. The time remaining until the window closes is 424.2 minutes. 
-
-The market question is whether BTC closes at or above the opening price. So, the current price is below the opening price, but there's still time for it to reverse. The challenge is to estimate the probability of that happening.
-
-Looking at the calibration anchors provided, they give reference points for different percentage moves. The current move is -0.16%, which is between -0.25% and 0.00%. The anchors for -0.25% are 3500-4000, and for 0.00% it's 5000. Since the current move is -0.16%, which is closer to 0% than to -0.25%, I need to interpolate between the -0.25% anchor and the 0.00% anchor.
-
-But wait, the user mentioned adjusting for time remaining. More time left means more room to reverse, so pull the estimate closer to 5000. The time remaining is 424.2 minutes, which is about 7 hours. That's a significant amount of time, so the probability should be adjusted upwards from the anchor for -0.25% but not all the way to 5000.
-
-First, calculate how far -0.16% is between 0% and -0.25%. The difference between 0% and -0.25% is 0.25%. The current move is 0.16% below the opening, so it's 0.16/0.25 = 64% of the way from 0% to -0.25%. Therefore, the base probability without considering time would be 5000 - (5000 - 3750) * 0.64. Wait, the anchor for -0.25% is 3500-4000. Let's take the midpoint for simplicity, say 3750. So the base probability would be 5000 - (5000 - 3750) * (0.16/0.25). That's 5000 - 1250 * 0.64 = 5000 - 800 = 4200. But this is without considering time. 
-
-However, since there's 424 minutes left, which is a lot of time, we need to adjust the probability closer to 5000. The original anchor for -0.25% is 3500-4000. But with time, the probability should increase. How much? The instruction says to adjust for time remaining. The more time, the closer to 5000. But how to quantify this?
-
-The user says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;. So if the base estimate without time is 4200, but with time, we need to move it towards 5000. But how much?
-
-But perhaps the initial approach is not correct. Maybe the anchors are for specific moves, and time is a separate factor. Let me think again. The anchors are for a move over a short window. The time remaining here is 424 minutes, which is about 7 hours. The problem states that a short window leaves room for movement, but here the time is 7 hours. Is that considered short? The original anchors might be for a shorter window, but the user says to adjust for time remaining. 
-
-Alternatively, maybe the time adjustment is a separate factor. For example, if the time is longer, the probability is higher. But how to model that? The user hasn't provided specific time-based adjustments, only that more time pulls the estimate closer to 5000. 
-
-So, if the current move is -0.16%, which is between 0% and -0.25%, and the time is 424 minutes, which is a long time, then the probability should be between the anchor for -0.25% (say 3750) and 5000. The exact amount depends on how much time is left. But without a specific formula, I have to use the given instruction to adjust. 
-
-Alternatively, maybe the initial interpolation between the anchors is sufficient, and the time adjustment is a multiplier. But since the user says &quot;adjust for time remaining&quot;, perhaps I should take the base probability (interpolated between the -0.25% and 0% anchors) and then adjust it towards 5000 based on the time. 
-
-For example, if the base probability is 4200 (as calculated earlier), and the time is long, maybe increase it by a certain percentage. But how to quantify that? The user didn't give specific time factors, so this is a bit ambiguous. 
-
-Alternatively, perhaps the time adjustment is already factored into the anchors. But the user says to adjust for time remaining, so it's an additional factor. 
-
-Given the lack of specific time-based formulas, I might have to make an educated guess. Since the time is 424 minutes, which is a significant amount, the probability should be higher than the anchor for -0.25% but not as high as 5000. Let's say the base estimate is 4000 (midpoint of 3500-4000 for -0.25%), and then adjust upwards. 
-
-But the current move is -0.16%, which is less negative than -0.25%, so the base probability should be higher than the -0.25% anchor. Let's interpolate between the -0.25% and 0.00% anchors. The -0.25% anchor is 3500-4000, let's take 3750 as the midpoint. The 0.00% is 5000. The difference between -0.25% and 0.00% is 0.25%, and the current move is -0.16%, which is 0.16% from 0.00% towards -0.25%. So the fraction is 0.16 / 0.25 = 0.64. Therefore, the base probability would be 3750 + (5000 - 3750) * (1 - 0.64) = 3750 + 1250 * 0.36 = 3750 + 450 = 4200. 
-
-Now, considering the time remaining of 424 minutes. The instruction says more time left pulls the estimate closer to 5000. So, how much? If the time were very short, say 0 minutes, the probability would be the base estimate (4200). If the time is very long, it would be 5000. But how to quantify this? 
-
-Assuming that the time adjustment is linear, but without a specific formula, perhaps we can consider that the time remaining is 424 minutes. Let's assume that the original anchors are for a certain time window, say, 1 hour. If the current time is longer, we adjust accordingly. However, without knowing the original time frame of the anchors, this is tricky. 
-
-Alternatively, the user might expect that since the time is 424 minutes (7 hours), which is a long time, the probability should be significantly higher than the base estimate. Maybe increase the base estimate by a certain percentage. For example, if the base is 4200, and with time, it's adjusted to, say, 4500. But this is arbitrary. 
-
-Alternatively, think about the volatility. BTC is volatile, so even with time, the probability might not be too high. But the user says to consider that a short window leaves room for movement, but here the time is 7 hours, which is not short. However, the user's instruction says to adjust for time remaining, so more time means more room to reverse. 
-
-Another approach: the probability is inversely related to the magnitude of the move and directly related to time. Since the move is -0.16%, which is a small negative move, and time is 7 hours, the probability should be higher than 50% (since the move is small and time is enough for reversal). But the anchors for -0.25% are around 3500-4000, which is 35-40%, so with time, maybe 45-50%? But the user's answer needs to be an integer between 0 and 10000. 
+    <a href="https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&amp;requestId=13385607" target="_blank" rel="noopener noreferrer">View receipt · 13385607 <span aria-hidden="true">↗</span></a></div></details>
+    <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+      <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> BTC moved +0.15% from its opening price.</p><p><b>Time:</b> 28.1 minutes remained when these inputs were observed.</p><p><b>Comparison:</b> The baseline is 64.91% and the LLM estimate is 59.00%. Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p></div>
+      <details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market 1">Okay, let&#39;s try to figure out this probability. The user wants to know the chance that BTC closes at or above its opening price of $79,714.20. The current price is $79,837.00, which is a +0.15% increase from the opening. There&#39;s 28.1 minutes left until the window closes.
 
-Wait, the anchors are for specific moves. The -0.25% anchor is 3500-4000, which is 35-40%. The current move is -0.16%, which is less negative. So the base probability (without time) would be higher than 40%. But with time, even higher. 
+First, I need to recall the calibration anchors provided. The anchors are for different percentage moves. The current move is +0.15%, which is between 0.00% and +0.25%. The anchors for +0.25% are 6000-6500. Since 0.15% is less than 0.25%, maybe the probability is between 5000 and 6000-6500. But wait, the user mentioned that the time remaining affects the estimate. More time means more room to reverse, so pull closer to 5000. But here, there&#39;s 28.1 minutes left. Is that considered a short window? The problem says &quot;short window&quot; leaves room for the price to move further or reverse. So with 28 minutes, maybe the probability isn&#39;t too close to 5000, but not as high as the +0.25% anchor.
 
-But how to translate this into the integer. If the base is 4200 (as calculated earlier), and with time, we adjust it towards 5000. Let's say the adjustment is 10% of the distance from 4200 to 5000. That would be 4200 + 0.1*(800) = 4280. But this is arbitrary. 
+The current move is +0.15%, which is a positive move but not as much as +0.25%. The anchor for +0.25% is 6000-6500. Since 0.15% is 60% of the way from 0% to 0.25%, maybe the probability is 60% of the way from 5000 to 6500. Let&#39;s calculate that. The difference between 5000 and 6500 is 1500. 60% of that is 900, so 5000 + 900 = 5900. But wait, the anchor for +0.25% is 6000-6500, so maybe it&#39;s better to interpolate between 0% (5000) and +0.25% (6000-6500). Since the move is 0.15%, which is 60% of 0.25%, maybe the probability is 5000 + 0.6*(6500-5000) = 5000 + 900 = 5900. But the time remaining is 28 minutes. The problem says that more time left pulls the estimate closer to 5000. However, 28 minutes is a short time, so maybe the effect is minimal. Alternatively, maybe the time remaining is considered short enough that the probability isn&#39;t pulled too much. So maybe the initial interpolation is okay. But the user says &quot;a short window leaves real room for the price to move further or reverse before closing.&quot; So even though there&#39;s some time left, the volatility might mean that the price could reverse. So perhaps the probability is a bit lower than the anchor for +0.25%? Wait, the anchor for +0.25% is 6000-6500, which is higher than 5000. But since the current move is +0.15%, which is less than +0.25%, maybe the probability is between 5000 and 6000-6500. But how to adjust for time?
 
-Alternatively, if the time is 7 hours, which is a long time, maybe the probability is 4500. But without a clear method, it's challenging. 
+Alternatively, maybe the time remaining is 28 minutes, which is about 0.47 hours. The problem says &quot;short window&quot; so the time is not too long, so the estimate isn&#39;t pulled too close to 5000. So perhaps the initial interpolation is okay. Let me think again. The user says to adjust for time remaining: more time left means more room to reverse, so pull closer to 5000. But with 28 minutes, which is a short time, so maybe the adjustment is minimal. Therefore, the probability is closer to the anchor for +0.15% which is between 0% and +0.25%. So maybe 5000 + (0.15/0.25)*(6500-5000) = 5000 + 0.6*1500 = 5900. But since the time is short, maybe not pulling it all the way. So 5900 is a possible answer. However, the user might expect a more precise calculation. Alternatively, maybe the 0.15% is closer to 0.00% than 0.25%, so the probability is closer to 5000. Let me check the anchors again. For 0.00% it&#39;s 5000. For +0.25% it&#39;s 6000-6500. So maybe the probability is 5000 + (0.15/0.25)*(6500-5000) = 5000 + 0.6*1500 = 5900. But the time remaining is 28 minutes. How does that factor in? The problem says to adjust for time. If there&#39;s more time, pull closer to 5000. But with 28 minutes, which is not a lot, maybe the adjustment is small. So maybe 5900 is acceptable. But I need to make sure. Alternatively, maybe the time is considered as a factor that reduces the probability. For example, even though the current price is up 0.15%, with some time left, there&#39;s a chance it could go down. So the probability might be slightly less than the anchor for +0.25% (which is 6000-6500). But since the current move is 0.15%, which is less than 0.25%, maybe the probability is 5900. Alternatively, if the time is considered, maybe we take the anchor for +0.15% and adjust. But since there&#39;s no specific anchor for 0.15%, we have to interpolate. So I think 5900 is a reasonable estimate. But maybe the answer is 5900. However, I should check if there&#39;s a different approach. Another way: the current price is +0.15%, which is a positive move, so the probability should be above 5000. The question is how much above. The anchors for +0.25% are 6000-6500, so maybe 6000 is a starting point. But since it&#39;s 0.15% instead of 0.25%, maybe 6000 * (0.15/0.25) = 3600, but that doesn&#39;t make sense because it&#39;s below 5000. Wait, that approach is wrong. The anchors are probabilities, not the percentage moves. So the probability increases with the percentage move. So for +0.25%, it&#39;s 6000-6500. So for +0.15%, which is 60% of 0.25%, the probability is 60% of the way from 5000 to 6500. So 5000 + 0.6*(6500-5000) = 5000 + 900 = 5900. That seems right. And since the time is 28 minutes, which is short, the adjustment is minimal. So the answer is 5900.</div></details>
+    </div></details>
+  </article><article class="signal-card" data-signal="strong">
+    <div class="card-top"><div class="identity"><span class="asset-icon btc" aria-hidden="true">₿</span><div><span class="eyebrow">BTC / EVENT CONTRACT</span><h3>BTC closes at or above its opening price</h3></div></div><span class="badge strong">Strong signal</span></div>
+    <p class="symbol">BTC-0-06SEP26-2000-5497/tUSDC#YES</p>
+    <div class="market-metrics"><div><span>DreamDEX</span><strong>4.85%</strong></div><div><span>Independent ensemble</span><strong class="blue">40.15%</strong></div><div><span>Ensemble divergence</span><strong class="positive">+35.30 pts</strong></div></div>
+    <div class="comparison"><div class="bar-row"><span>Market</span><div class="bar-track" aria-hidden="true"><i class="market-bar" style="width:4.8500000000000005%"></i></div><b>4.85%</b></div><div class="bar-row"><span>Ensemble</span><div class="bar-track" aria-hidden="true"><i class="ensemble-bar" style="width:40.15324463060696%"></i></div><b>40.15%</b></div></div>
+    <p class="assessment">Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p>
+    <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
+    <div><dt>Opening price</dt><dd>$79,953.72</dd></div><div><dt>Agent price</dt><dd>$79,845.00</dd></div><div><dt>Price move</dt><dd>-0.14%</dd></div><div><dt>Naive baseline</dt><dd>37.31%</dd></div><div><dt>LLM estimate</dt><dd>43.00%</dd></div><div><dt>Time left at observation</dt><dd>30.7 min</dd></div></dl>
+    <p>Input snapshot: 2026-09-06 19:29:20 UTC<br>Price received: 2026-09-06 19:29:20 UTC<br>Market expiry: 2026-09-06 20:00:00 UTC</p>
+    <p class="agent-status">Successful agent receipt · final answer checked</p>
 
-Another thought: the user's instruction says &quot;a short window leaves real room for the price to move further or reverse before closing.&quot; But here, the time is 424 minutes, which is about 7 hours. If the original anchors are for a short window (like 1 hour), then 7 hours is longer, so the probability should be higher. However, the user's instruction says to adjust for time remaining, so more time means closer to 5000. 
 
-Assuming that the base probability (without time) is 4200, and with time, we adjust it towards 5000. Let's say we take the midpoint between 4200 and 5000, which is 4600. But this is a guess. 
+    <a href="https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&amp;requestId=13385453" target="_blank" rel="noopener noreferrer">View receipt · 13385453 <span aria-hidden="true">↗</span></a></div></details>
+    <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+      <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> BTC moved -0.14% from its opening price.</p><p><b>Time:</b> 30.7 minutes remained when these inputs were observed.</p><p><b>Comparison:</b> The baseline is 37.31% and the LLM estimate is 43.00%. Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p></div>
+      <details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market 2">Okay, let&#39;s try to figure out this probability. The user is asking for the probability that BTC closes at or above its opening price of $79,953.72, given that the current price is $79,845.00, which is a -0.14% move since opening. There&#39;s 30.7 minutes left until the window closes.
 
-Alternatively, if the time is 7 hours, which is 7*60=420 minutes, so 424 minutes is roughly 7 hours. If the original time for the anchors was, say, 1 hour, then the time is 7 times longer. But without knowing the original time, this is speculative. 
+First, I need to recall the calibration anchors provided. The anchors are for different percentage moves and their corresponding probabilities. The key here is that the price has already moved -0.14% from the opening. The anchors given are for -0.25%, -0.50%, -1.00%, etc. Since -0.14% is between 0% and -0.25%, I need to interpolate between the 0.00% and -0.25% anchors.
 
-Alternatively, the user might expect that the time adjustment is already factored into the interpolation. For example, since the move is -0.16%, which is closer to 0%, and the time is long, the probability is closer to 5000. So maybe 4500. 
+The 0.00% move is around 5000, and the -0.25% move is between 3500-4000. Since -0.14% is 56% of the way from 0% to -0.25% (because 0.14/0.25 = 0.56), I should adjust the probability accordingly. The difference between 5000 and 3500 is 1500. If I take 56% of that, it&#39;s 1500 * 0.56 = 840. So subtracting that from 5000 gives 5000 - 840 = 4160. But wait, the -0.25% anchor is between 3500-4000, so maybe the exact midpoint is around 3750? Hmm, but the user said to interpolate between the anchors, not take exact midpoints. So maybe the anchor for -0.25% is 3750 as an average? But the original instruction says the anchors are approximate, so maybe I should take the lower end as 3500 and upper as 4000.
 
-But given the lack of precise rules, I'll proceed with the initial interpolation (4200) and adjust it towards 5000. Let's say 4500 as a reasonable estimate. However, the user might have a different approach. 
+Alternatively, maybe the user expects a linear interpolation between the 0.00% (5000) and the -0.25% (say 3750). Let me check the original numbers again. The -0.25% move is ~3500-4000. So maybe take the average of 3500 and 4000, which is 3750. Then the difference between 5000 and 3750 is 1250. Since -0.14% is 56% of the way to -0.25%, subtract 56% of 1250 from 5000. 1250 * 0.56 = 700. So 5000 - 700 = 4300. But that&#39;s just one way. Alternatively, maybe the user expects a different approach.
 
-Wait, another angle: the current price is -0.16% from the opening. The question is whether it closes at or above the opening. So the required move is +0.16% from the current price. Given that BTC is volatile, but with 7 hours, there's a chance. 
+But also, the time remaining is 30.7 minutes. The note says that more time left means pull the estimate closer to 5000. Since there&#39;s 30.7 minutes, which is a short window, but not extremely short. The instruction says &quot;very little time left&quot; would lean closer to the anchor. But 30 minutes is maybe considered a moderate time. However, the price has already moved down, so the question is whether it can reverse. Since the time is 30 minutes, there&#39;s some time for the price to move back. But the initial move is -0.14%, which is a small negative move.
 
-But how does that relate to the calibration anchors? The anchors are for the move from the opening. For example, a +0.25% move from the opening would be 6000-6500. But here, the current move is -0.16%, and the required move to close at opening is +0.16%. 
+But the calibration anchors already account for the move, and the time is adjusted by pulling the estimate closer to 5000 if there&#39;s more time. Wait, the note says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it&quot;. So in this case, with 30.7 minutes left, which is not very little time, but not a lot either. So maybe we need to adjust the initial estimate (from the move) towards 5000 a bit.
 
-But the calibration anchors are for the total move from the opening, not the required move from current. So maybe the current move is -0.16%, which is between 0% and -0.25%, and the time is 7 hours. 
+But first, let&#39;s get the base estimate based on the move. The move is -0.14%, which is between 0% and -0.25%. So the base probability would be between 5000 and 3500-4000. Let&#39;s take the anchor for -0.25% as 3750 (average of 3500-4000). So the base probability is 5000 - (0.14/0.25)*(5000 - 3750). Let&#39;s calculate that. 0.14/0.25 = 0.56. 5000 - 3750 = 1250. 0.56 * 1250 = 700. So 5000 - 700 = 4300. So base estimate is 4300.
 
-Given that, the base probability is between 3500-5000. Since the move is -0.16%, which is closer to 0% than -0.25%, the base is higher than 3500. Let's take the midpoint between 3500 and 5000 for the -0.25% and 0% anchors. Wait, the -0.25% anchor is 3500-4000, and 0% is 5000. So the base probability is interpolated between 3750 (mid of 3500-4000) and 5000. The current move is -0.16%, which is 0.16% from 0% towards -0.25%. So the fraction is 0.16/0.25 = 0.64. So the base probability is 3750 + (5000 - 3750) * (1 - 0.64) = 3750 + 1250 * 0.36 = 3750 + 450 = 4200. 
+Now, adjust for time. Since there&#39;s 30.7 minutes left, which is a moderate time. The instruction says that more time means pull closer to 5000. So if the base is 4300, we need to adjust it towards 5000. How much? The problem is that the exact adjustment isn&#39;t given, but the note says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;. So perhaps we need to find a factor based on the time. However, without specific data, this is subjective.
 
-Now, adjust for time. The time is 424 minutes. The user says more time means pull closer to 5000. How much? Let's assume that the adjustment is proportional to the time. For example, if the original time for the anchors was, say, 1 hour (60 minutes), then 424 minutes is 7 times longer. But without knowing the original time, this is speculative. 
+Alternatively, maybe the time adjustment is already factored into the anchors? Or perhaps the anchors are for a specific time frame, and the user is expecting to adjust based on the given time. But since the user hasn&#39;t provided specific time-based adjustments, except the note, I have to use that.
 
-Alternatively, if the time is long, maybe the probability is 4500. But this is a guess. Another approach: since the move is small and time is long, maybe the probability is around 4500-5000. But given the calibration anchors, the base is 4200. If we adjust 4200 towards 5000 by, say, 20%, that would be 4200 + 0.2*800 = 4360. 
+Since 30.7 minutes is not very little time, maybe we adjust the base estimate a bit towards 5000. Let&#39;s say, for example, that the time adjustment is a percentage. Suppose that if there&#39;s more time, say, 1 hour, we might adjust more, but 30 minutes is maybe a moderate adjustment.
 
-Alternatively, if the time is 7 hours, which is a long time, maybe the probability is 4500. But I need to make a decision here. 
-
-Considering that the current move is -0.16%, which is a small negative move, and with 7 hours to go, the probability should be higher than the base estimate. Let's say 4500. But I'm not entirely sure. Another way: the original anchor for -0.25% is 3500-4000. If the move is -0.16%, which is 64% of the way from 0% to -0.25%, then the base is 4200. With time, adjust towards 5000. Let's say the adjustment is 25% of the distance from 4200 to 5000. That would be 4200 + 0.25*800 = 4200 + 200 = 4400. 
-
-But again, this is arbitrary. Given the lack of precise instructions, I'll go with 4500 as a reasonable estimate, considering the time and the small negative move.</p>
-        </details>
-    </article>
-
-    <article class="ticket">
-      <header class="ticket-header">
-        <div>
-          <span class="ticket-asset">ETH</span>
-          <h2 class="ticket-symbol">ETH-0-07SEP26/tUSDC#YES</h2>
-        </div>
-        
-      </header>
-      <p class="ticket-question">ETH closes at or above its opening price</p>
-      <div class="stat-row">
-        <div class="stat"><span class="stat-label">opening</span><span class="stat-value">$2480.78</span></div>
-        <div class="stat"><span class="stat-label">current</span><span class="stat-value">$2483.42</span></div>
-        <div class="stat"><span class="stat-label">move</span><span class="stat-value stat-value--up">+0.11%</span></div>
-      </div>
-      
-      <div class="bars">
-        <div class="bar-row">
-          <span class="bar-label">DreamDEX</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--market" style="width:56.4%"></div></div>
-          <span class="bar-value">0.5635</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">Naive</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--naive" style="width:50.9%"></div></div>
-          <span class="bar-value">0.5085</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">LLM est.</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ai" style="width:52.0%"></div></div>
-          <span class="bar-value">0.5200</span>
-        </div>
-        <div class="bar-row bar-row--ensemble">
-          <span class="bar-label">Ensemble</span>
-          <div class="bar-track"><div class="bar-fill bar-fill--ensemble" style="width:51.4%"></div></div>
-          <span class="bar-value">0.5143</span>
-        </div>
-      </div>
-      <div class="divergence ">
-          <span class="divergence-label">ensemble divergence</span>
-          <span class="divergence-value">-0.0492</span>
-        </div>
-      <details class="reasoning-details">
-          <summary>AI reasoning</summary>
-          <p class="reasoning">Okay, let's tackle this problem step by step. The user wants to estimate the probability that ETH closes at or above its opening price of $2480.78, given the current price is $2483.42, which is a +0.11% move. The time remaining is 424.2 minutes.
-
-First, I need to recall the calibration anchors provided. The anchors are for different percentage moves and their corresponding probabilities. The key here is that the current move is +0.11%, which is between 0.00% and +0.25%. The anchors for +0.25% are 6000-6500, and for 0.00% it's 5000. Since the move is positive but less than 0.25%, the probability should be between 5000 and 6000-6500. But since the move is only 0.11%, maybe closer to 5000 but slightly higher.
-
-However, the user also mentioned that the time remaining affects the probability. The longer the time, the more room there is for the price to reverse, so the probability should be closer to 5000. Conversely, if there's very little time, it's closer to the anchor. Here, the time remaining is 424.2 minutes, which is about 7 hours. That's a significant amount of time for a volatile asset like ETH. So even though the current move is positive, the time left might mean the probability isn't too high.
-
-But wait, the current price is already above the opening price. So the market is already in a positive position. However, the question is about closing at or above the opening. The current move is +0.11%, but over 424 minutes, the price could move further or reverse. The calibration anchors for +0.25% are 6000-6500, but since the move is smaller, maybe we interpolate between 0.00% (5000) and +0.25% (6000-6500). 
-
-The exact move is 0.11%, which is roughly 44% of the way from 0.00% to 0.25% (since 0.11 / 0.25 = 0.44). So if the anchor for 0.25% is 6000, then the probability would be 5000 + 0.44*(6000-5000) = 5000 + 440 = 5440. But the anchor for +0.25% is 6000-6500, so maybe take the midpoint of 6250? Then 5000 + 0.44*(6250-5000) = 5000 + 550 = 5550. But the user said not to just interpolate between the anchors but also adjust for time.
-
-Since there's 424 minutes left, which is a lot, the probability should be pulled closer to 5000. So maybe reduce the initial estimate. If the initial estimate without considering time is around 5500, then with time, it's adjusted towards 5000. How much? The time remaining is 424 minutes. The problem says that more time left means more room to reverse, so pull the estimate closer to 5000. But how much?
-
-The calibration anchors might not have a direct time factor, but the user's instruction says to adjust for time remaining. Since the time is 424 minutes, which is a long time, maybe the adjustment is significant. For example, if the initial estimate is 5500, but with time, we might reduce it by, say, 10%? That would be 5500 - 550 = 4950. But that's just a guess. Alternatively, maybe the time factor is considered in the anchor's original values. However, the user hasn't provided specific time-based adjustments, so I have to rely on the instruction to adjust based on time.
-
-Alternatively, maybe the time remaining is considered in terms of how much the price can move. For example, with more time, the probability of reversal is higher, so even though the current move is positive, the probability isn't as high as the anchor for +0.25% because the time allows for a reversal. So perhaps the probability is lower than the 6000-6500 range. But since the move is only +0.11%, which is less than +0.25%, maybe the base probability is around 5000 + (0.11/0.25)*(6000-5000) = 5000 + 440 = 5440. Then, considering the time, we might reduce it. If the time is 424 minutes, which is a long time, maybe reduce by 10% to 5440 * 0.9 = 4896, which would round to 4900. But I'm not sure about the exact percentage.
-
-Alternatively, since the time is 424 minutes, which is about 7 hours, but the market is for a short window. However, the user says &quot;short window&quot; but 424 minutes is over 7 hours, which might be considered a longer window. But the user says &quot;short window&quot; in the initial instruction. Wait, the user says &quot;short window (adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it).&quot;
-
-So, the time remaining is 424.2 minutes. If that's considered a short window, but the user says &quot;short window&quot; but 424 minutes is 7 hours. Maybe the user considers 424 minutes as a short window. However, the exact definition of &quot;short&quot; isn't given. But regardless, the instruction is to adjust based on time. Since there's a lot of time left, the probability should be pulled closer to 5000.
-
-So, if the base estimate without time adjustment is around 5440, then with time, it's pulled towards 5000. Let's say we reduce it by 20% (just as a rough estimate), so 5440 * 0.8 = 4352. But that might be too much. Alternatively, maybe the adjustment is linear. For example, if the time remaining is 424 minutes, and assuming that the maximum time for the window is, say, 1000 minutes, then 424 is 42.4% of that. But without knowing the maximum time, it's hard to say.
-
-Alternatively, since the user hasn't provided specific time-based adjustments, maybe the time is just a factor to pull the estimate towards 5000. Given that, and the current move is +0.11%, which is a small positive move, but with a lot of time left, the probability might be around 5000 + (some small amount). For example, maybe 5200? But how to determine that?
-
-Alternatively, think about the anchors. The +0.25% move is 6000-6500, but with time, you pull towards 5000. So if the move is +0.11%, which is 44% of the way to +0.25%, then the base is 5000 + 0.44*(6000-5000) = 5440. Then, considering the time, which is long, maybe subtract 10% (5440 - 544 = 4896) which is ~4900. But again, this is arbitrary.
-
-Alternatively, since the move is +0.11%, which is less than +0.25%, but the time is long, maybe the probability is around 5200. But without a precise method, it's hard. However, the user wants an integer between 0 and 10000. Given that, and the need to adjust for time, I think the best approach is to take the anchor for +0.25% (say 6000), but since the move is smaller, interpolate. So 0.11% is 44% of 0.25%, so 5000 + 44%*(6000-5000) = 5440. Then, adjust for time. Since time is long, pull towards 5000. Maybe reduce by 20%: 5440 * 0.8 = 4352. But that's a big drop. Alternatively, reduce by 10%: 4896. But maybe the time adjustment isn't that drastic. 
-
-Alternatively, think about the fact that the current price is already above the opening. So the probability isn't just based on the move but also the time. However, the calibration anchors are based on the move, not the time. So the initial estimate is based on the move, then adjusted for time. So if the move is +0.11%, the initial estimate is around 5440, then adjust for time. If the time is long, maybe reduce by 1000, making it 4440. But that's a guess.
-
-Alternatively, since the time is 424 minutes, which is about 7 hours, maybe the probability is around 5200. But I need to make a decision here. Given the uncertainty, I think the most reasonable approach is to interpolate between the 0.00% and +0.25% anchors, then adjust for time. So 0.11% is 44% of the way from 0 to 0.25%, so 5000 + 0.44*(6000-5000) = 5440. Then, because of the time remaining, pull it closer to 5000. Let's say by 20%, so 5440 * 0.8 = 4352. But that seems too low. Alternatively, maybe 5440 - 500 = 4940. That's a 9% reduction. Maybe that's more reasonable. So 4940, which rounds to 4940. But the user might expect a different approach.
-
-Alternatively, maybe the time is considered in the original anchor. For example, the anchors are for a certain time frame, and since the time here is longer, we need to adjust. However, the user hasn't provided specific time-based adjustments, so I have to rely on the instruction that more time left means pulling closer to 5000. So, if the initial estimate is 5440, and the time is long, maybe the final estimate is 5200. That's a 200-point reduction. But again, it's a guess.
-
-Considering all that, I'll go with 5200 as a reasonable estimate, but I'm not entirely sure. Alternatively, if the time is considered to have a significant impact, maybe 5000. But the move is positive, so it should be above 5000. Maybe 5300. But without precise data, it's challenging. Given the instructions, I think the best approach is to interpolate between the 0.00% and +0.25% anchors, then adjust for time. So 5440 adjusted for time. Let's say 5440 - 200 = 5240. Rounding to 5200. But the exact answer is hard to determine. However, the user might expect a value closer to the anchor adjusted for the move and time. So I'll go with 5200.</p>
-        </details>
-    </article>
-    </div>
-    
-    <div class="history">
-      <h2>Recent signal history</h2>
-      <p class="history-note">Every run this pipeline has made appends here — not proof any signal was later correct (that needs the market to actually settle first), just evidence this has been running against live data across sessions, not staged for one demo.</p>
-      <table class="history-table">
-        <thead><tr><th>Time (UTC)</th><th>Symbol</th><th>DreamDEX</th><th>Ensemble</th><th>Agreement</th></tr></thead>
-        <tbody>
-          <tr class="">
-            <td>2026-09-06 16:59:48</td>
-            <td>ETH-0-07SEP26/tUSDC#YES</td>
-            <td>0.5635</td>
-            <td>0.5143</td>
-            <td>none</td>
-          </tr>
-<tr class="history-row--flagged">
-            <td>2026-09-06 16:59:48</td>
-            <td>BTC-0-07SEP26/tUSDC#YES</td>
-            <td>0.2990</td>
-            <td>0.4687</td>
-            <td>strong</td>
-          </tr>
-<tr class="">
-            <td>2026-09-06 16:59:48</td>
-            <td>BTC-0-06SEP26-2000/tUSDC#YES</td>
-            <td>0.4495</td>
-            <td>0.4970</td>
-            <td>none</td>
-          </tr>
-<tr class="">
-            <td>2026-09-06 16:59:48</td>
-            <td>ETH-0-06SEP26-2000/tUSDC#YES</td>
-            <td>0.6195</td>
-            <td>0.5302</td>
-            <td>none</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <footer>Testnet data — not financial advice. Somnia × DreamDEX Event Contracts Hackathon.</footer>
-  </div>
-</body>
-</html>
+Alternatively, maybe the time adjustment is a multiplier. For example, if the time is T minutes, and the original estimate is P, then the adjusted probability is P + (5000 - P) * (T / T_max), where T_max is some maximum time. But since there&#39;s no T_max given, this is speculative.
+
+Alternatively, think about the time remaining. Since the time is 30.7 minutes, which is about 0.5 hours. If the market is for a short window, maybe the time is considered as a factor. But without specific data, it&#39;s hard.
+
+Alternatively, maybe the time adjustment is minimal here. Since the move is small (-0.14%), and the time is 30 minutes, which is not very little, but not a long time. So maybe the base estimate of 4300 is already adjusted, and we don&#39;t need to change much. However, the note says that more time left pulls closer to 5000. So if the time is 30 minutes, which is more than, say, 10 minutes, but less than an hour, maybe we adjust the base estimate towards 5000 by a certain amount.
+
+Alternatively, think of it as a linear adjustment. Suppose that if the time is 0, you have to go to the anchor (since no time to reverse), and as time increases, you approach 5000. But without knowing the exact time frame, it&#39;s hard. However, the user might expect that since the time is 30 minutes, which is a short window, but not extremely short, so the adjustment is moderate.
+
+Alternatively, maybe the time adjustment is not necessary here, and the main factor is the move. But the note says to adjust for time.
+
+Alternatively, maybe the time adjustment is already considered in the anchors. For example, the anchors are for a specific time window, and if the current time is different, adjust. But the problem is that the user hasn&#39;t provided the original time window.
+
+This is getting complicated. Maybe the user expects that the time adjustment is minimal here. For example, if the time is 30 minutes, which is a short window, but not extremely short, so the adjustment is small. So maybe take the base estimate of 4300 and adjust it slightly towards 5000.
+
+Alternatively, think of the time as a factor. Suppose that the probability is calculated as follows: the base probability based on the move, then adjusted by a factor based on time. For example, if the time is T, then the adjustment is (T / T_max) * (5000 - base). But again, without T_max, this is impossible.
+
+Alternatively, since the user says &quot;very little time left means less room to reverse, so lean closer to the anchor or beyond it&quot;, and &quot;more time left means pull your estimate closer to 5000&quot;. So if there&#39;s 30 minutes, which is not very little, but not a lot. So maybe we adjust the base estimate towards 5000 by a certain percentage.
+
+Assuming that the base estimate is 4300, and we adjust it towards 5000. Let&#39;s say, for example, that we adjust it by 10% towards 5000. So 4300 + (5000 - 4300) * 0.1 = 4300 + 70 = 4370. But this is arbitrary.
+
+Alternatively, maybe the time adjustment is proportional to the time remaining. For example, if the time is 30 minutes, and the original time window was, say, 60 minutes, then the adjustment would be 50% towards 5000. But since we don&#39;t know the original time window, this is impossible.
+
+Given that, perhaps the user expects that the time adjustment is minimal here. So the main factor is the move. So the base estimate is 4300. However, since the time is 30 minutes, which is a short window, but not very short, maybe we adjust a bit.
+
+Alternatively, think of the time as a factor that reduces the impact of the move. For example, if the time is longer, the price has more chance to reverse, so the probability is closer to 5000. If the time is shorter, the probability is closer to the anchor.
+
+But since the time is 30 minutes, which is not very short, maybe we don&#39;t adjust much. So maybe the answer is around 4300.
+
+But I need to make a decision. Given that the move is -0.14%, which is between 0% and -0.25%, and the time is 30 minutes. The base probability is between 5000 and 3500-4000. Let&#39;s take the average of 3500-4000 as 3750. So the base is 5000 - (0.14/0.25)*(5000-3750) = 5000 - 0.56*1250 = 5000 - 700 = 4300.
+
+Now, since there&#39;s 30 minutes left, which is not very little, so we adjust towards 5000. How much? Maybe 10% of the difference between 4300 and 5000. So 700 * 0.1 = 70. So 4300 + 70 = 4370. But this is arbitrary.
+
+Alternatively, if the time is 30 minutes, and assuming that the maximum time for the market is, say, 60 minutes, then 30 minutes is half the time. So the adjustment would be half towards 5000. But again, this is speculative.
+
+Alternatively, the user might not expect any time adjustment, and the answer is just based on the move. But the note says to adjust for time.
+
+Another approach: The note says that for very little time left, you lean closer to the anchor. For more time, pull closer to 5000. Since 30 minutes is not very little, maybe we don&#39;t adjust much. So the answer is around 4300.
+
+But maybe the time adjustment is already considered in the anchors. For example, the anchors are for a specific time frame, and if the current time is different, adjust. But without knowing the original time frame, this is impossible.
+
+Given all this, I think the safest answer is to use the base estimate of 4300, and maybe adjust slightly towards 5000. But without clear guidance, it&#39;s hard.
+
+Alternatively, think of the -0.14% move as a small negative move. The probability of reversing in 30 minutes. Given that BTC is volatile, but in a short window, it&#39;s possible. So maybe the probability is around 4500. But how to get there?
+
+If the base is 4300, and we adjust towards 5000 by, say, 200, making it 4500. But again, arbitrary.
+
+Alternatively, since the move is -0.14%, which is very close to 0%, maybe the probability is slightly below 5000. For example, if the move was 0%, it&#39;s 5000. For a small negative move, maybe 4800. But that would be if the time is very short. But with 30 minutes, maybe 4800.
+
+Wait, but the anchors for -0.25% are 3500-4000. So -0.14% is less negative than -0.25%, so the probability should be higher than 3500-4000. So between 4000 and 5000.
+
+If I interpolate between 0% (5000) and -0.25% (say 3750), then -0.14% is 56% of the way from 0% to -0.25%. So the probability is 5000 - 0.56*(5000-3750) = 5000 - 0.56*1250 = 5000 - 700 = 4300.
+
+But if I consider that the time is 30 minutes, which is not very little, so we adjust towards 5000. Let&#39;s say, for example, that we adjust by 10% of the distance from 4300 to 5000. That would be 4300 + 70 = 4370. But again, arbitrary.
+
+Alternatively, maybe the time adjustment is a factor of 0.5, so 4300 + (5000-4300)*0.5 = 4300 + 350 = 4650.
+
+But without clear rules, this is guesswork.
+
+Given that the user says to adjust for time, and the time is 30 minutes, which is a short window but not extremely short. Maybe the adjustment is minimal. So the answer is 4300.
+
+Alternatively, since the time is 30 minutes, which is about 0.5 hours, and assuming that the market is for a 1-hour window, then 30 minutes is half the time. So the adjustment would be to move halfway towards 5000. So 4300 + (5000-4300)/2 = 4300 + 350 = 4650.
+
+But again, this is speculative.
+
+Given the ambiguity, but needing to provide an answer, I think the base estimate of 4300 is the most defensible, considering the move. However, the note says to adjust for time, so maybe we should adjust a bit.
+
+If I take the base of 4300 and adjust it towards 5000 by 10%, it&#39;s 4370. If I adjust by 20%, it&#39;s 4460. But without knowing the exact adjustment factor, it&#39;s hard.
+
+Alternatively, think of the time remaining as a factor. If the time is 30 minutes, which is 0.5 hours, and assuming that the market is for a 1-hour window, then the probability is adjusted based on the time. For example, if the time is half, then the probability is halfway between the anchor and 5000.
+
+But since the anchor for -0.25% is 3750, and 5000 is the midpoint, then halfway would be 4375. But our base was 4300, which is already below that.
+
+This is getting too convoluted. Given that, I think the answer is around 4300, but I need to pick an integer.
+
+Alternatively, let&#39;s think of the move as -0.14%, which is close to 0%, and the time is 30 minutes. Since the price has moved down slightly, but there&#39;s some time left, the probability is slightly below 5000. Maybe 4800? But how to get there?
+
+If the move was 0%, it&#39;s 5000. For a -0.25% move, it&#39;s 3750. So for -0.14%, it&#39;s 5000 - (0.14/0.25)*(5000-3750) = 5000 - 700 = 4300. So that&#39;s the base.
+
+But with time remaining, maybe the probability is higher than 4300. So maybe 4500. But how much?
+
+If I assume that the time adjustment adds 200 to the base, making it 4500. But this is arbitrary.
+
+Alternatively, think of the time as allowing for some reversal. So the probability is higher than the base.
+
+But without a clear method, I think the safest answer is 4300, as calculated from the move, and assuming that the time adjustment is minimal. However, the note says to adjust for time, so maybe the answer is higher.
+
+Another way: The note says that more time means pull closer to 5000. Since 30 minutes is not a lot, but not very little. Let&#39;s say that the time adjustment is 10% of the way from the base to 5000. So 4300 + (5000-4300)*0.1 = 4370.
+
+But again, this is arbitrary.
+
+In the absence of clear instructions, I&#39;ll go with the base estimate of 4300. So the final answer is 4300.</div></details>
+    </div></details>
+  </article><article class="signal-card" data-signal="strong">
+    <div class="card-top"><div class="identity"><span class="asset-icon eth" aria-hidden="true">Ξ</span><div><span class="eyebrow">ETH / EVENT CONTRACT</span><h3>ETH closes at or above its opening price</h3></div></div><span class="badge strong">Strong signal</span></div>
+    <p class="symbol">ETH-0-07SEP26/tUSDC#YES</p>
+    <div class="market-metrics"><div><span>DreamDEX</span><strong>84.50%</strong></div><div><span>Independent ensemble</span><strong class="blue">62.83%</strong></div><div><span>Ensemble divergence</span><strong class="negative">-21.67 pts</strong></div></div>
+    <div class="comparison"><div class="bar-row"><span>Market</span><div class="bar-track" aria-hidden="true"><i class="market-bar" style="width:84.5%"></i></div><b>84.50%</b></div><div class="bar-row"><span>Ensemble</span><div class="bar-track" aria-hidden="true"><i class="ensemble-bar" style="width:62.83371516586735%"></i></div><b>62.83%</b></div></div>
+    <p class="assessment">Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p>
+    <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
+    <div><dt>Opening price</dt><dd>$2,480.78</dd></div><div><dt>Agent price</dt><dd>$2,491.36</dd></div><div><dt>Price move</dt><dd>+0.43%</dd></div><div><dt>Naive baseline</dt><dd>60.67%</dd></div><div><dt>LLM estimate</dt><dd>65.00%</dd></div><div><dt>Time left at observation</dt><dd>266.3 min</dd></div></dl>
+    <p>Input snapshot: 2026-09-06 19:33:40 UTC<br>Price received: 2026-09-06 19:33:40 UTC<br>Market expiry: 2026-09-07 00:00:00 UTC</p>
+    <p class="agent-status">Successful agent receipt · final answer checked</p>
+
+
+    <a href="https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&amp;requestId=13385720" target="_blank" rel="noopener noreferrer">View receipt · 13385720 <span aria-hidden="true">↗</span></a></div></details>
+    <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+      <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> ETH moved +0.43% from its opening price.</p><p><b>Time:</b> 266.3 minutes remained when these inputs were observed.</p><p><b>Comparison:</b> The baseline is 60.67% and the LLM estimate is 65.00%. Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p></div>
+      <details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market 3">Okay, let&#39;s tackle this problem step by step. The user wants to estimate the probability that ETH closes at or above its opening price. The current price is $2491.36, and the opening price was $2480.78. The price change since opening is +0.43%, and there&#39;s 266.3 minutes left until the window closes.
+
+First, I need to figure out the percentage move. The current price is 0.43% above the opening. The calibration anchors provided give reference points for different moves. For a +0.50% move, the probability is around 7000-7800. But here, the move is +0.43%, which is slightly less than +0.50%. So maybe the probability is a bit lower than the upper end of that range. But I also need to consider the time remaining.
+
+The time remaining is 266.3 minutes. The user mentioned that more time left means more room to reverse, so the estimate should be pulled closer to 5000. However, the current move is positive, so the probability should still be above 5000. But how much does the time affect it?
+
+The calibration anchors don&#39;t directly account for time, but the user says to adjust for time remaining. Since there&#39;s a significant amount of time left (over 4 hours), the market might have more opportunity to reverse. So even though the current move is +0.43%, the probability might be lower than the anchor for +0.50% because of the time left. But how to quantify that?
+
+The anchors for +0.50% are 7000-7800. Let&#39;s take the midpoint, say 7400. But with 266 minutes left, which is a lot, maybe we adjust downward. How much? The user says to pull closer to 5000. Maybe reduce by a certain percentage. But how?
+
+Alternatively, think about the volatility. ETH is volatile, so even with time, the price could move. But since the current move is positive, the probability is higher than 5000. Maybe interpolate between the +0.43% and the time adjustment.
+
+Wait, the user said that for a +0.50% move, the probability is 7000-7800. Since 0.43% is slightly less than 0.50%, maybe the probability is a bit lower than that range. Let&#39;s say 7000-7500. Then, considering the time remaining, which is 266 minutes, which is a long time, so maybe reduce that by 10-20%? For example, if the base was 7500, reducing by 15% would be 6375. But that&#39;s just a rough estimate.
+
+Alternatively, maybe use linear interpolation between the +0.25% and +0.50% anchors. The +0.25% is 6000-6500, and +0.50% is 7000-7800. The current move is 0.43%, which is 0.43 - 0.25 = 0.18% above the +0.25% anchor. The total range between +0.25% and +0.50% is 0.25%. So 0.18/0.25 = 72% of the way from +0.25% to +0.50%. So take the midpoint of the +0.25% range (6250) and the midpoint of the +0.50% range (7400). The difference is 1150. 72% of that is 828. So 6250 + 828 = 7078. Then adjust for time.
+
+But the time adjustment is tricky. Since there&#39;s a lot of time left, maybe reduce this by 20%? 7078 * 0.8 = 5662. But that&#39;s below 5000? Wait, no, 7078 * 0.8 is 5662, which is above 5000. But maybe the adjustment is not that drastic. Alternatively, maybe the time adjustment is a separate factor. The user says &quot;pull your estimate closer to 5000&quot; when there&#39;s more time. So if the base estimate without time consideration is 7078, then with time, we need to bring it down. How much?
+
+Alternatively, think of the time as a factor. For example, if the time was very short, we might use the anchor directly. But with 266 minutes, which is a long time, maybe the probability is somewhere between the anchor and 5000. But how to quantify?
+
+Alternatively, maybe use the time to adjust the move. For example, a longer time allows for more reversal, so the current move of +0.43% might be less certain. But how to translate that into probability?
+
+Alternatively, think of it as a normal distribution. But without knowing volatility, that&#39;s hard. But the user provided anchors, so maybe stick to those.
+
+Another approach: the user&#39;s instruction says to interpolate between the anchors. The current move is +0.43%, which is between +0.25% and +0.50%. So interpolate between the +0.25% (6000-6500) and +0.50% (7000-7800). Let&#39;s take the lower end of the +0.25% (6000) and upper end of +0.50% (7800). The difference is 1800 over 0.25% move. So per 0.01% move, it&#39;s 1800 / 25 = 72 per 0.01%. For 0.43% - 0.25% = 0.18%, so 0.18 * 72 = 12.96. So 6000 + 12.96 = 6012.96? Wait, that doesn&#39;t make sense. Wait, maybe the range is from 6000 to 6500 for +0.25%, and 7000 to 7800 for +0.50%. So the midpoints are 6250 and 7400. The difference is 1150 over 0.25% move. So per 0.01% move, 1150 / 25 = 46 per 0.01%. The current move is 0.43%, which is 0.43 - 0.25 = 0.18% above the +0.25% anchor. So 0.18 * 46 = 8.28. So 6250 + 8.28 = 6258.28. But that&#39;s just the midpoint. But this seems too low. Maybe I should take the upper end of the +0.25% range (6500) and lower end of +0.50% (7000). Then the difference is 500 over 0.25%, so 2000 per 1% move. So 0.18% would be 360. So 6500 + 360 = 6860. Then adjust for time.
+
+But this is getting complicated. Maybe the user expects a simpler approach. Let&#39;s think: the current move is +0.43%, which is close to +0.50%. The anchor for +0.50% is 7000-7800. Let&#39;s take the midpoint of that as 7400. But since the move is slightly less than 0.50%, maybe reduce by a small amount. Let&#39;s say 7300. Then adjust for time.
+
+The time remaining is 266.3 minutes, which is about 4.4 hours. That&#39;s a long time, so the probability should be pulled closer to 5000. How much? If the original estimate is 7300, and we need to adjust for time. Maybe reduce it by a percentage. If the time was very short, say 10 minutes, we might not adjust. If it&#39;s very long, maybe reduce by 30%. But 266 minutes is a moderate time. Maybe reduce by 15-20%. So 7300 * 0.85 = 6205. Or 7300 * 0.8 = 5840. But how to decide?
+
+Alternatively, think of the time as a factor. For example, the probability is a function of both the move and the time. The user says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000&quot;. So the more time, the closer to 5000. So if the move is +0.43%, and time is long, the probability is somewhere between the anchor for +0.43% and 5000.
+
+But without a specific formula, it&#39;s hard. Maybe the user expects that for a +0.43% move, the base probability is between the +0.25% and +0.50% anchors. Let&#39;s take the average of 6000-6500 and 7000-7800. The average of 6250 and 7400 is 6825. Then, considering the time, which is long, reduce it. Let&#39;s say reduce by 20%, so 6825 * 0.8 = 5460. But that&#39;s below 5000? No, 5460 is above 5000. Wait, 6825 * 0.8 is 5460. That seems reasonable. But maybe the adjustment is not 20%. Alternatively, maybe the time adjustment is a fixed amount. For example, if the time is more than 240 minutes (4 hours), reduce by 1000. But that&#39;s arbitrary.
+
+Alternatively, think of the time as a multiplier. For example, if the time is 266 minutes, which is about 4.4 hours. If the market has a longer time, the probability is adjusted. But without specific data, it&#39;s hard. Maybe the user expects that for a +0.43% move, the base is around 7000-7500, and with time, it&#39;s pulled down to maybe 6000-6500. But how to choose?
+
+Alternatively, use the anchor for +0.50% (7000-7800) and adjust for the fact that the move is 0.43% instead of 0.50%. So the difference is 0.07% less. The range between +0.25% and +0.50% is 0.25%, so 0.07% is 28% of that. So reduce the probability by 28% from the upper end. If the upper end is 7800, then 7800 * (1 - 0.28) = 5604. But that seems too low. Alternatively, if the base is 7400 (midpoint), then 7400 * 0.72 = 5328. Still, that&#39;s below 5000? No, 5328 is above 5000. But this is getting too speculative.
+
+Given the uncertainty, perhaps the best approach is to take the midpoint between +0.25% and +0.50% anchors, which is around 6250 to 7400, and then adjust for time. Since the time is long, maybe take the lower end of that range. Let&#39;s say 6500. But that might be too low. Alternatively, take 7000 and reduce it by a certain amount.
+
+Alternatively, think that for a +0.50% move, the probability is 7000-7800. For a +0.43% move, which is 86% of 0.50%, so maybe 86% of the probability. So 7000 * 0.86 = 6020, 7800 * 0.86 = 6690. So maybe 6350. Then adjust for time. If time is long, reduce by 10-20%. 6350 * 0.9 = 5715. That&#39;s a possible estimate.
+
+But since the user says &quot;do not simply default to 5000 whenever the move is nonzero&quot;, and the current move is positive, so the probability should be above 5000. So maybe 5700. But I&#39;m not sure.
+
+Alternatively, the user might expect that since the move is +0.43%, which is close to +0.50%, and the time is 266 minutes, which is a long time, so the probability is around 6000-6500. But how to pick the exact number.
+
+Given the lack of precise data, I&#39;ll go with an estimate of 6500. But I need to check if that&#39;s reasonable. If the move is +0.43%, and time is long, maybe 6500 is a reasonable guess. Alternatively, 6000. But I think the initial anchor for +0.50% is 7000-7800, so 0.43% is a bit less, so maybe 6800. Then adjust for time. If time is long, reduce by 10%: 6800 * 0.9 = 6120. So 6120. But the user wants an integer. Maybe 6100.
+
+Alternatively, since the time is 266 minutes, which is about 4.4 hours. If I consider that the probability for a +0.50% move with no time (instant) would be 7800, but with 4.4 hours, it&#39;s pulled down. But without a formula, it&#39;s hard. Maybe the answer is around 6500.</div></details>
+    </div></details>
+  </article><article class="signal-card" data-signal="strong">
+    <div class="card-top"><div class="identity"><span class="asset-icon eth" aria-hidden="true">Ξ</span><div><span class="eyebrow">ETH / EVENT CONTRACT</span><h3>ETH closes at or above its opening price</h3></div></div><span class="badge strong">Strong signal</span></div>
+    <p class="symbol">ETH-0-06SEP26-2000-52DB/tUSDC#YES</p>
+    <div class="market-metrics"><div><span>DreamDEX</span><strong>98.00%</strong></div><div><span>Independent ensemble</span><strong class="blue">76.41%</strong></div><div><span>Ensemble divergence</span><strong class="negative">-21.59 pts</strong></div></div>
+    <div class="comparison"><div class="bar-row"><span>Market</span><div class="bar-track" aria-hidden="true"><i class="market-bar" style="width:98%"></i></div><b>98.00%</b></div><div class="bar-row"><span>Ensemble</span><div class="bar-track" aria-hidden="true"><i class="ensemble-bar" style="width:76.40703753933724%"></i></div><b>76.41%</b></div></div>
+    <p class="assessment">Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p>
+    <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
+    <div><dt>Opening price</dt><dd>$2,480.20</dd></div><div><dt>Agent price</dt><dd>$2,491.29</dd></div><div><dt>Price move</dt><dd>+0.45%</dd></div><div><dt>Naive baseline</dt><dd>81.11%</dd></div><div><dt>LLM estimate</dt><dd>71.70%</dd></div><div><dt>Time left at observation</dt><dd>27.6 min</dd></div></dl>
+    <p>Input snapshot: 2026-09-06 19:32:26 UTC<br>Price received: 2026-09-06 19:32:25 UTC<br>Market expiry: 2026-09-06 20:00:00 UTC</p>
+    <p class="agent-status">Successful agent receipt · final answer checked</p>
+
+
+    <a href="https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&amp;requestId=13385641" target="_blank" rel="noopener noreferrer">View receipt · 13385641 <span aria-hidden="true">↗</span></a></div></details>
+    <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+      <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> ETH moved +0.45% from its opening price.</p><p><b>Time:</b> 27.6 minutes remained when these inputs were observed.</p><p><b>Comparison:</b> The baseline is 81.11% and the LLM estimate is 71.70%. Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p></div>
+      <details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market 4">Okay, let&#39;s tackle this problem step by step. So, the user wants me to estimate the probability that ETH closes at or above its opening price. The current price is $2491.29, and the opening price was $2480.20. The price change since opening is +0.45%, and there&#39;s 27.6 minutes left until the window closes.
+
+First, I need to recall the calibration anchors provided. The user mentioned that for a BTC/ETH move over a short window, there are approximate probabilities based on the percentage move. The key here is that the time remaining affects the estimate. More time means more room for the price to reverse, so the probability should be closer to 5000. Less time means less room, so we can lean towards the anchor or even beyond it.
+
+The current move is +0.45% from the opening price. Looking at the anchors, the closest ones are +0.25% (6000-6500) and +0.50% (7000-7800). Since 0.45% is between 0.25% and 0.50%, I should interpolate between those ranges.
+
+But wait, the user also mentioned that the time remaining is 27.6 minutes. That&#39;s a short window. The note says that with very little time left, we should lean closer to the anchor or beyond. So even though the current move is +0.45%, the short time might make the probability higher than the anchor for 0.50%? Or maybe not? Wait, the anchors are for the move, but time affects how much the price can reverse.
+
+Let me think again. The calibration anchors are for the move, but the time remaining adjusts the probability. For example, if there&#39;s more time, the probability is pulled closer to 5000. If there&#39;s very little time, the probability is closer to the anchor.
+
+So, the current move is +0.45%, which is between +0.25% and +0.50%. The anchors for those are 6000-6500 and 7000-7800. Let&#39;s take the midpoints for simplicity. Let&#39;s say +0.25% is around 6250 (midpoint of 6000-6500), and +0.50% is around 7400 (midpoint of 7000-7800). The difference between 0.25% and 0.50% is 0.25%, and 0.45% is 0.20% above 0.25%. So, the fraction is 0.20 / 0.25 = 0.8. So, the probability would be 6250 + 0.8*(7400 - 6250) = 6250 + 0.8*1150 = 6250 + 920 = 7170.
+
+But then we need to adjust for the time remaining. The time is 27.6 minutes. The note says that very little time left means less room to reverse, so lean closer to the anchor or beyond. So, if the time is short, the probability should be higher than the interpolated value. Wait, but the anchor for +0.50% is 7000-7800. If the time is short, maybe the probability is higher than the interpolated 7170? Or does the time adjustment pull it towards 5000? Wait, the original note says: &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot;
+
+So, if there&#39;s very little time, we don&#39;t pull towards 5000. Instead, we stay closer to the anchor. So in this case, since the time is 27.6 minutes, which is a short window, we don&#39;t adjust the estimate towards 5000. Therefore, the interpolated value of 7170 might be acceptable. But wait, the original anchors are for the move, but the time is a factor. So maybe the time adjustment is a multiplier or a factor that affects the probability.
+
+Alternatively, perhaps the time remaining affects the probability by adjusting how confident we are in the current move. For example, if there&#39;s more time, the price could reverse, so the probability is lower (closer to 5000). If there&#39;s less time, the probability is higher (closer to the anchor).
+
+But how do I quantify that? The user didn&#39;t give specific formulas, just the calibration anchors. So maybe the time adjustment is a factor that scales the probability. For instance, if the time is very short, we don&#39;t adjust, so the probability is based on the move. If the time is longer, we adjust towards 5000.
+
+But the problem is that the user hasn&#39;t provided a specific method for adjusting based on time. The note says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot; So, if the time is short, we don&#39;t pull towards 5000. So, the initial estimate based on the move is acceptable.
+
+But the current move is +0.45%, which is between +0.25% and +0.50%. So the interpolated value is around 7170 as calculated. However, since the time is 27.6 minutes, which is a short window, we don&#39;t adjust towards 5000. Therefore, the probability is around 7170. But the answer needs to be an integer between 0 and 10000.
+
+But maybe I should check the exact anchors again. The +0.50% is 7000-7800. So maybe the lower end is 7000, upper 7800. The +0.25% is 6000-6500. So, the 0.45% is 0.20% above 0.25%, which is 80% of the way to 0.50%. So, if we take the midpoint of the +0.25% range (6250) and the midpoint of the +0.50% range (7400), then 6250 + 0.8*(7400-6250) = 6250 + 920 = 7170.
+
+But the user said &quot;interpolate between them, and do not simply default to 5000 whenever the move is nonzero.&quot; So, the answer should be around 7170. However, the time is 27.6 minutes. Since it&#39;s a short window, we don&#39;t adjust towards 5000. Therefore, the probability is approximately 7170. But the answer needs to be an integer. So, 7170. But maybe the user expects a different approach.
+
+Alternatively, perhaps the time remaining affects the probability by a certain percentage. For example, if the time is 27.6 minutes, which is about 0.46 hours. But without a specific formula, it&#39;s hard to say. The note says that very little time left means less room to reverse, so lean closer to the anchor. So, if the time is very short, the probability is higher. So, if the original estimate based on the move is 7170, and time is short, maybe we can add some value.
+
+But without specific rules, it&#39;s tricky. The user&#39;s instruction says to interpolate between the anchors and adjust for time. Since the time is short, we don&#39;t adjust towards 5000. Therefore, the answer is around 7170. However, the exact value might be in the range of 7000-7800.
+
+But maybe I should check if the current move is +0.45%, which is closer to +0.50% than +0.25%. So, perhaps the probability is closer to the +0.50% anchor. The +0.50% anchor is 7000-7800. Let&#39;s say the lower end is 7000, upper 7800. The 0.45% is 0.05% below 0.50%, so 0.05/0.25 = 20% from 0.25% to 0.50%. Wait, no, 0.45% is 0.20% above 0.25%, which is 80% of the way from 0.25% to 0.50%. So, the interpolation would be 6000-6500 (for 0.25%) to 7000-7800 (for 0.50%). So, the midpoint of the 0.25% range is 6250, and the midpoint of 0.50% is 7400. The difference is 1150. 80% of that is 920. So 6250 + 920 = 7170.
+
+Alternatively, maybe the user expects a different approach. For example, if the current move is +0.45%, which is between +0.25% and +0.50%, then the probability is between 6000-6500 and 7000-7800. So, the lower bound would be 6000 + (0.45-0.25)/(0.50-0.25)*(7000-6000) = 6000 + (0.2/0.25)*1000 = 6000 + 800 = 6800. Similarly, the upper bound would be 6500 + (0.2/0.25)*(7800-6500) = 6500 + 0.8*1300 = 6500 + 1040 = 7540. So, the probability is between 6800 and 7540.
+
+But since the time is short, we don&#39;t adjust towards 5000. So, maybe take the midpoint of that range: (6800 + 7540)/2 = 7170. So again, 7170.
+
+But the user might expect rounding. So 7170 is 7170. But the answer must be an integer. So, 7170. But maybe the actual answer is 7200 or 7100. However, given the interpolation, 7170 is accurate. But since the user says &quot;approximate calibration anchors&quot; and &quot;interpolate between them,&quot; maybe 7170 is acceptable.
+
+Alternatively, perhaps the user expects a different method. For example, using the +0.50% anchor and adjusting for the fact that the move is slightly less than 0.50%. So, if +0.50% is 7000-7800, then 0.45% is 0.05% less than 0.50%. So, maybe subtract a certain percentage. But without specific rules, this is speculative.
+
+In the absence of a precise formula, the best approach is to interpolate between the given anchors. So, 7170 is the estimate. However, since the answer must be an integer, 7170 is acceptable.
+
+But I need to check if there&#39;s any other factors. The current price is above the opening price, so the probability should be higher than 5000. The move is positive, so the probability is above 5000. The time is short, so we don&#39;t adjust towards 5000. Therefore, the answer should be around 7170.
+
+So, I think the final answer is 7170.</div></details>
+    </div></details>
+  </article><article class="signal-card" data-signal="strong">
+    <div class="card-top"><div class="identity"><span class="asset-icon eth" aria-hidden="true">Ξ</span><div><span class="eyebrow">ETH / EVENT CONTRACT</span><h3>ETH closes at or above its opening price</h3></div></div><span class="badge strong">Strong signal</span></div>
+    <p class="symbol">ETH-0-06SEP26-2000-5498/tUSDC#YES</p>
+    <div class="market-metrics"><div><span>DreamDEX</span><strong>22.40%</strong></div><div><span>Independent ensemble</span><strong class="blue">41.95%</strong></div><div><span>Ensemble divergence</span><strong class="positive">+19.55 pts</strong></div></div>
+    <div class="comparison"><div class="bar-row"><span>Market</span><div class="bar-track" aria-hidden="true"><i class="market-bar" style="width:22.4%"></i></div><b>22.40%</b></div><div class="bar-row"><span>Ensemble</span><div class="bar-track" aria-hidden="true"><i class="ensemble-bar" style="width:41.94571172246449%"></i></div><b>41.95%</b></div></div>
+    <p class="assessment">Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p>
+    <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
+    <div><dt>Opening price</dt><dd>$2,494.64</dd></div><div><dt>Agent price</dt><dd>$2,491.47</dd></div><div><dt>Price move</dt><dd>-0.13%</dd></div><div><dt>Naive baseline</dt><dd>40.39%</dd></div><div><dt>LLM estimate</dt><dd>43.50%</dd></div><div><dt>Time left at observation</dt><dd>29.3 min</dd></div></dl>
+    <p>Input snapshot: 2026-09-06 19:30:43 UTC<br>Price received: 2026-09-06 19:30:42 UTC<br>Market expiry: 2026-09-06 20:00:00 UTC</p>
+    <p class="agent-status">Successful agent receipt · final answer checked</p>
+
+
+    <a href="https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&amp;requestId=13385535" target="_blank" rel="noopener noreferrer">View receipt · 13385535 <span aria-hidden="true">↗</span></a></div></details>
+    <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+      <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> ETH moved -0.13% from its opening price.</p><p><b>Time:</b> 29.3 minutes remained when these inputs were observed.</p><p><b>Comparison:</b> The baseline is 40.39% and the LLM estimate is 43.50%. Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.</p></div>
+      <details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market 5">Okay, let&#39;s tackle this problem step by step. So, the user wants the probability that ETH closes at or above its opening price of $2494.64, given the current price is $2491.47, which is a -0.13% move since opening. The time remaining is 29.3 minutes.
+
+First, I need to recall the calibration anchors provided. The key points are for different percentage moves and how they translate to probabilities. The user mentioned that negative moves should have probabilities below 5000, and the time remaining affects the estimate. More time means more room to reverse, so the probability should be closer to 5000. Less time means less room, so closer to the anchor or even beyond.
+
+The current price is down -0.13% from the opening. The anchors given for negative moves are:
+
+- -0.25% move -&gt; 3500-4000
+- -0.50% move -&gt; 2200-3000
+- -1.00% move -&gt; 500-1500
+
+Since -0.13% is between 0% and -0.25%, I need to interpolate between the 0% anchor (5000) and the -0.25% anchor (3500-4000). But the exact range for -0.25% is 3500-4000, so maybe take the midpoint as 3750 for simplicity? Or perhaps use the lower end? Wait, the user says to interpolate between the anchors, not just pick a number.
+
+So, the move is -0.13%, which is 52% of the way from 0% to -0.25% (since 0.13/0.25 = 0.52). So, the probability should be 52% of the way from 5000 to 3500 (assuming the lower end of the -0.25% range). Let&#39;s calculate that:
+
+5000 - (5000 - 3500) * 0.52 = 5000 - 1500 * 0.52 = 5000 - 780 = 4220. But wait, the -0.25% range is 3500-4000. Maybe I should use the midpoint of that range, which is 3750. Then the calculation would be 5000 - (5000 - 3750)*0.52 = 5000 - 1250*0.52 = 5000 - 650 = 4350. But the user said to interpolate between the anchors, not necessarily take midpoints. Alternatively, maybe the anchors are approximate ranges, so for -0.25%, it&#39;s between 3500 and 4000. So, perhaps the probability is somewhere in that range. But since the move is -0.13%, which is less negative than -0.25%, the probability should be higher than the -0.25% anchor. Wait, but the anchors for negative moves are probabilities below 5000. So, the more negative the move, the lower the probability. So, for -0.13%, which is less negative than -0.25%, the probability should be higher than the -0.25% anchor.
+
+So, the anchor for -0.25% is 3500-4000. Let&#39;s take the lower end as 3500 and upper as 4000. Since -0.13% is 52% of the way from 0% to -0.25%, the probability would be 52% of the way from 5000 (for 0%) to 3500 (for -0.25%). So, 5000 - (5000-3500)*0.52 = 5000 - 780 = 4220. Alternatively, if using the upper end of the -0.25% anchor (4000), then 5000 - (5000-4000)*0.52 = 5000 - 520 = 4480. But the user says to interpolate between the anchors, so maybe take the midpoint between 5000 and the -0.25% range. But the problem is that the anchors for negative moves are ranges, not exact numbers.
+
+Alternatively, maybe the user expects us to use the given anchors as reference points and adjust based on the time remaining. The time remaining is 29.3 minutes. The user said that more time left means more room to reverse, so pull the estimate closer to 5000. Since 29.3 minutes is a short window, maybe the time effect is minimal? Wait, but the user says &quot;short window leaves real room for the price to move further or reverse before closing.&quot; So, even though the time is short, there&#39;s still room. However, the calibration anchors already account for the move, and the time adjustment is an additional factor.
+
+Wait, the original instruction says: &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot; So, if there&#39;s more time, the probability is closer to 5000. If very little time, closer to the anchor.
+
+But in this case, the time remaining is 29.3 minutes. How does that affect the estimate? The user says &quot;short window&quot; but doesn&#39;t specify how much time is considered &quot;very little.&quot; However, the problem states that ETH is a volatile asset, and the window is short, so there&#39;s room for the price to move further or reverse.
+
+So, perhaps the time adjustment would mean that we don&#39;t pull the estimate all the way to 5000, but maybe adjust it slightly. But how? The original move is -0.13%, which is between 0% and -0.25%. Let&#39;s first calculate the base probability without considering time, then adjust for time.
+
+Assuming the base probability for a -0.13% move is between 5000 (for 0%) and 3500-4000 (for -0.25%). Let&#39;s take the midpoint of the -0.25% range as 3750. Then, the base probability would be 5000 - (5000 - 3750) * (0.13 / 0.25) = 5000 - 1250 * 0.52 = 5000 - 650 = 4350.
+
+Now, considering the time remaining. Since the time is 29.3 minutes, which is a short window, but not extremely short. The instruction says that with very little time left, we lean closer to the anchor. But since 29.3 minutes is not extremely short, maybe the adjustment is minimal. However, the problem states that the window is short, so there&#39;s real room for the price to move further or reverse. Therefore, the time adjustment would mean that the probability is pulled a bit closer to 5000.
+
+But how much? Let&#39;s think. If the time was very short, say a few minutes, the probability might be closer to the anchor. But with 29 minutes, perhaps we adjust by a small percentage. For example, maybe we take the base probability and adjust it by a certain percentage towards 5000. However, the user hasn&#39;t provided specific rules for time adjustment, only that more time pulls it closer to 5000.
+
+Alternatively, maybe the time adjustment is already factored into the anchors. Wait, the anchors are for a short window, but the user says to adjust for time remaining. So, perhaps the given anchors are for a certain time frame, and we need to adjust based on the actual time. However, the problem doesn&#39;t specify the original time frame of the anchors.
+
+This is a bit ambiguous. The user says &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot;
+
+In this case, since the time is 29.3 minutes, which is a short window, but not extremely short. So, the adjustment would be to pull the estimate a bit closer to 5000. But how much?
+
+If the base probability was 4350 (from earlier), and we adjust it closer to 5000, perhaps by a certain percentage. For example, if we assume that with 29 minutes, the adjustment is 10%, then 4350 + (5000 - 4350)*0.1 = 4350 + 65 = 4415. But this is arbitrary.
+
+Alternatively, maybe the time adjustment is a multiplier. But without specific guidelines, it&#39;s hard to quantify. The user might expect that since the time is short, the probability is closer to the anchor (i.e., not adjusted much towards 5000). Wait, the instruction says &quot;very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot; So, if the time is short, we don&#39;t pull it towards 5000 as much. Wait, the original instruction says: &quot;more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.&quot;
+
+So, if there&#39;s more time, pull closer to 5000. If very little time, lean closer to the anchor (i.e., not pull towards 5000). So, in this case, since the time is 29.3 minutes, which is a short window, but not &quot;very little,&quot; perhaps the adjustment is minimal.
+
+But how to translate that into a number. Maybe the time adjustment is a factor that reduces the pull towards 5000. For example, if the time was 1 hour, we might pull it more towards 5000, but with 29 minutes, maybe we don&#39;t adjust much.
+
+Alternatively, perhaps the time adjustment is already considered in the given anchors. For instance, the anchors are for a certain time frame (maybe 1 hour?), and if the actual time is different, we adjust. But without knowing the original time frame, this is hard.
+
+Given the ambiguity, maybe the user expects us to focus on the percentage move and the time as a factor to adjust the estimate. Since the move is -0.13%, which is between 0% and -0.25%, and the time is short, so the adjustment is to not pull it too much towards 5000.
+
+So, if the base probability is around 4350 (as calculated earlier), and considering the time is short, we might keep it around that value. But maybe adjust it slightly.
+
+Alternatively, since the move is -0.13%, which is closer to 0% than to -0.25%, maybe the probability is closer to 5000. For example, if we take the -0.25% anchor as 3750 (midpoint), then the difference between 0% and -0.25% is 0.25%. The current move is 0.13% from 0%, so 0.13/0.25 = 0.52 of the way. So, the probability would be 5000 - (5000 - 3750) * 0.52 = 5000 - 650 = 4350.
+
+But since the time is short, maybe we adjust this by a small amount. For example, if the time is 29 minutes, which is about 0.5 hours, and assuming that the original anchors are for a 1-hour window, then the time adjustment would be to pull the estimate closer to 5000. However, without specific rules, this is speculative.
+
+Alternatively, the user might expect that the time adjustment is already considered in the given anchors, and we just need to interpolate between the given anchors. So, the answer would be around 4350. But since the user said to interpolate between the anchors and not just default to 5000, and given that the move is -0.13%, which is between 0% and -0.25%, the probability would be between 5000 and 3500-4000.
+
+But the exact value? Let&#39;s think again. The -0.25% anchor is 3500-4000. Let&#39;s take the lower end as 3500 and upper as 4000. The move is -0.13%, which is 52% of the way from 0% to -0.25%. So, the probability would be 5000 - (5000 - 3500) * 0.52 = 5000 - 780 = 4220. Alternatively, if using the upper end of the -0.25% anchor (4000), then 5000 - (5000 - 4000) * 0.52 = 5000 - 520 = 4480.
+
+But the user says the anchors are reference points, not exact lookups. So, maybe take an average. For example, if the -0.25% range is 3500-4000, the midpoint is 3750. So, 5000 - (5000 - 3750) * 0.52 = 5000 - 650 = 4350.
+
+But the problem is that the user also mentioned that the time remaining is 29.3 minutes. Since it&#39;s a short window, the probability might be a bit higher than the anchor suggests because there&#39;s still time for the price to reverse. Wait, but the instruction says that more time left pulls it closer to 5000, and less time leaves it closer to the anchor. So, with 29 minutes, which is short, we don&#39;t pull it towards 5000. So, the base probability of 4350 is acceptable.
+
+Alternatively, maybe the time adjustment is to add a small percentage. For example, if the time is short, the probability is a bit higher than the anchor. But since the move is negative, the probability is below 5000.
+
+Given all that, I think the most reasonable estimate is around 4350. However, the user might expect rounding. But since the answer must be an integer between 0-10000, I&#39;ll go with 4350. But wait, let me check the original anchors again.
+
+Wait, the user provided for -0.25% move, the range is 3500-4000. So, maybe the probability is somewhere in that range. Since the move is -0.13%, which is 52% of the way to -0.25%, the probability would be 52% of the way from 5000 to 3500 (assuming the lower end). So 5000 - (5000-3500)*0.52 = 5000 - 780 = 4220. Alternatively, if the anchor for -0.25% is 3500-4000, maybe the probability is 4000 - (4000-3500)*0.52 = 4000 - 260 = 3740. But this seems inconsistent.
+
+Alternatively, maybe the probability for -0.25% is 3750 (midpoint), so the calculation is 5000 - (5000-3750)*0.52 = 5000 - 650 = 4350.
+
+Given the ambiguity, I think 4350 is a reasonable estimate. However, since the user might expect a different approach, maybe I should consider the time. If the time is 29 minutes, which is about 0.5 hours, and assuming that the original anchors are for a 1-hour window, then with half the time, the probability might be adjusted. But without specific rules, this is guesswork.
+
+Alternatively, the user might expect that since the move is -0.13%, which is close to 0%, the probability is slightly below 5000. For example, if the move is -0.13%, maybe the probability is around 4800. But that seems too high given the anchors.
+
+Wait, the anchors for 0% move is 5000, and for -0.25% is 3500-4000. So, the probability decreases as the move becomes more negative. So, for a -0.13% move, it&#39;s between 5000 and 3500-4000. Let&#39;s take the midpoint of the -0.25% range (3750) and interpolate between 5000 and 3750. The distance from 0% to -0.25% is 0.25%, and the current move is 0.13%, so 0.13/0.25 = 0.52. So, the probability is 5000 - (5000 - 3750) * 0.52 = 5000 - 650 = 4350.
+
+Therefore, I think the answer is 4350. But I need to check if there&#39;s any other factors. The time remaining is 29.3 minutes. If the time is short, the probability might be a bit lower (closer to the anchor), but since the move is only -0.13%, which is not too far, maybe the time adjustment is minimal.
+
+Alternatively, maybe the time adjustment is to multiply by a factor. For example, if the time is 29.3 minutes, which is about 0.5 hours, and assuming that the original anchors are for 1 hour, then the time factor is 0.5. But how does that affect the probability? Not sure.
+
+Given all this, I&#39;ll go with 4350 as the estimate.</div></details>
+    </div></details>
+  </article><article class="signal-card" data-signal="none">
+    <div class="card-top"><div class="identity"><span class="asset-icon btc" aria-hidden="true">₿</span><div><span class="eyebrow">BTC / EVENT CONTRACT</span><h3>BTC closes at or above its opening price</h3></div></div><span class="badge none">No signal</span></div>
+    <p class="symbol">BTC-0-07SEP26/tUSDC#YES</p>
+    <div class="market-metrics"><div><span>DreamDEX</span><strong>51.00%</strong></div><div><span>Independent ensemble</span><strong class="blue">49.94%</strong></div><div><span>Ensemble divergence</span><strong class="negative">-1.06 pts</strong></div></div>
+    <div class="comparison"><div class="bar-row"><span>Market</span><div class="bar-track" aria-hidden="true"><i class="market-bar" style="width:51%"></i></div><b>51.00%</b></div><div class="bar-row"><span>Ensemble</span><div class="bar-track" aria-hidden="true"><i class="ensemble-bar" style="width:49.94050924895357%"></i></div><b>49.94%</b></div></div>
+    <p class="assessment">Neither estimate differs from DreamDEX by the 15-point threshold.</p>
+    <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
+    <div><dt>Opening price</dt><dd>$79,830.95</dd></div><div><dt>Agent price</dt><dd>$79,828.00</dd></div><div><dt>Price move</dt><dd>-0.00%</dd></div><div><dt>Naive baseline</dt><dd>49.88%</dd></div><div><dt>LLM estimate</dt><dd>50.00%</dd></div><div><dt>Time left at observation</dt><dd>266.7 min</dd></div></dl>
+    <p>Input snapshot: 2026-09-06 19:33:15 UTC<br>Price received: 2026-09-06 19:33:14 UTC<br>Market expiry: 2026-09-07 00:00:00 UTC</p>
+    <p class="agent-status">Successful agent receipt · final answer checked</p>
+
+
+    <a href="https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&amp;requestId=13385692" target="_blank" rel="noopener noreferrer">View receipt · 13385692 <span aria-hidden="true">↗</span></a></div></details>
+    <details class="reasoning"><summary>View analysis &amp; AI reasoning <span aria-hidden="true">＋</span></summary><div class="evidence-body">
+      <div class="analysis-summary"><span class="eyebrow">INPUT SUMMARY · GENERATED FROM REPORT DATA</span><p><b>Move:</b> BTC moved -0.00% from its opening price.</p><p><b>Time:</b> 266.7 minutes remained when these inputs were observed.</p><p><b>Comparison:</b> The baseline is 49.88% and the LLM estimate is 50.00%. Neither estimate differs from DreamDEX by the 15-point threshold.</p></div>
+      <details class="raw"><summary>Original agent reasoning</summary><div class="raw-text" tabindex="0" role="region" aria-label="Original reasoning for market 6">Okay, let&#39;s tackle this problem step by step. The user wants the probability that BTC closes at or above its opening price, given the current price is almost the same as the opening price, with a -0.00% change. The time remaining is 266.7 minutes, which is about 4.45 hours.
+
+First, the calibration anchors provided. For a 0.00% move, the probability is around 5000. But since the time remaining is significant (over 4 hours), the market might have enough time to move. However, the current price is exactly at the opening price, so the move is 0%. But the anchors say 0.00% move is 5000. However, the note says that more time left means more room to reverse, so pull the estimate closer to 5000. Wait, but if the move is zero, the anchor is already 5000. But maybe the time remaining affects it?
+
+Wait, the instructions say: &quot;adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it&quot;. So if there&#39;s a lot of time left, even if the current move is 0%, the probability would be closer to 5000. But since the current move is 0%, the anchor is 5000. However, maybe the time remaining is considered here. Wait, but the anchor for 0.00% is already 5000. So if the time is long, maybe the probability is still 5000? But the note says that for a 0.00% move, the anchor is 5000, but if there&#39;s more time, you pull closer to 5000. But if it&#39;s already 5000, maybe there&#39;s no change.
+
+But maybe the current price is at 0% move, but the time remaining is 266.7 minutes. The question is, does the time remaining affect the probability even if the current move is zero? The instruction says that for a 0.00% move, the anchor is 5000, but with more time, you pull closer to 5000. But since it&#39;s already at 5000, maybe it&#39;s still 5000. However, perhaps the time remaining is considered as a factor that increases the uncertainty, so maybe the probability is slightly adjusted. But according to the instructions, the anchors are reference points, and you should interpolate between them. But in this case, the move is exactly 0%, so the anchor is 5000. The time remaining is 266.7 minutes. How does that affect it?
+
+Wait, the note says that more time left means more room to reverse, so pull your estimate closer to 5000. But if the current move is 0%, which is already at 5000, then maybe the time doesn&#39;t change it. But maybe the time is considered in the sense that even though the current move is 0%, with more time, the probability is still 5000 because there&#39;s a chance it could go up or down. But since the current price is exactly at the opening, the probability is 5000. However, the user might think that with more time, the probability is still 5000.
+
+Alternatively, maybe the time remaining is not directly affecting the probability here because the current move is 0%. The problem is that the user&#39;s instruction says to adjust for time remaining. But if the move is 0%, the anchor is 5000, and the time is 266.7 minutes. Since the time is more than a short window, but how does that affect? The note says that more time left means more room to reverse, so pull the estimate closer to 5000. But since the anchor is already 5000, maybe it&#39;s still 5000.
+
+Alternatively, maybe the time remaining is considered as a factor that increases the probability of reversal, but since the current move is 0%, the probability is 5000. So the answer would be 5000.
+
+But wait, the current price is exactly at the opening price, so the move is 0.00%, but the time is 266.7 minutes. The market is a binary prediction market, so the probability is based on the chance that the price will close at or above the opening. Since the current price is exactly at the opening, but there&#39;s time left, the probability isn&#39;t necessarily 5000. However, according to the calibration anchors, 0.00% move is 5000. So even with time left, the anchor is 5000. But the note says that more time left means more room to reverse, so pull closer to 5000. But if the anchor is already 5000, then maybe it&#39;s still 5000.
+
+Alternatively, maybe the time remaining is considered as a factor that increases the probability. Wait, no. The note says that for a move that&#39;s not zero, more time would make the estimate closer to 5000. For example, if there&#39;s a +0.25% move, but a lot of time left, you pull closer to 5000. But in this case, the move is 0%, so the anchor is 5000. So regardless of time, it&#39;s 5000.
+
+Therefore, the answer should be 5000.</div></details>
+    </div></details>
+  </article></div><div id="filter-empty" class="empty" hidden>No markets match this filter.</div><p id="board-count" class="board-count" aria-live="polite">Showing 6 of 6 markets</p><noscript><p class="muted">All markets are shown. Enable JavaScript to filter them.</p></noscript></section>
+<section id="methodology"><div class="section-heading"><div><span class="eyebrow">FROM SOURCE TO SIGNAL</span><h2>Evidence at every step.</h2></div><span class="subtle-tag">Somnia × DreamDEX</span></div><p class="section-intro">Two on-chain agents. One independent baseline. A transparent comparison you can inspect.</p><div class="flow"><div><div class="step"><span>01</span><span aria-hidden="true">↗</span></div><h3>DreamDEX market</h3><p>Read the opening price, order-book probability and on-chain trading status.</p></div><div><div class="step"><span>02</span><span aria-hidden="true">↗</span></div><h3>Somnia price agent</h3><p>Fetch BTC / ETH spot data through consensus-validated agent execution.</p></div><div><div class="step"><span>03</span><span aria-hidden="true">↗</span></div><h3>LLM estimator</h3><p>Estimate YES probability from the timestamped inputs. Check the final response against its receipt.</p></div><div><div class="step"><span>04</span><span aria-hidden="true">↗</span></div><h3>Ensemble gate</h3><p>Average the two estimates. Strong requires both to cross the 15-point threshold in the same direction.</p></div></div><p class="muted">The baseline uses a normal CDF with √time scaling and assumed annual volatility: BTC 55%, ETH 70%. These experimental models are not calibrated financial forecasts.</p></section>
+<section><span class="eyebrow">BUILT THROUGH REAL TESTNET RUNS</span><h2>Reliability comes from iteration.</h2><p class="section-intro">Each release records the problems found in live testing and the fixes that followed.</p><div class="timeline"><div><b>v0.0.0.3</b><h3>The correct price foundation</h3><p>Replaced the unusable strike field with DreamDEX's actual opening-price source.</p></div><div><b>v0.0.0.7–9</b><h3>A second model checks the signal</h3><p>Added ensemble agreement, real settlement scoring and a time-aware probability baseline.</p></div><div><b>v0.0.0.10</b><h3>Check the response, expose the evidence</h3><p>Validate final answers, retain receipt references and distinguish expired or unavailable estimates.</p></div></div></section>
+<section id="track-record" class="track-record"><div><span class="eyebrow">ACCOUNTABILITY, AFTER SETTLEMENT</span><h2>Track record</h2><p class="section-intro">Only on-chain resolved outcomes are scored. Lower Brier is better; voided markets are excluded.</p></div><div class="score-grid"><div><span>DreamDEX · avg. Brier</span><strong>0.0058</strong></div><div><span>Ensemble · avg. Brier</span><strong class="blue">0.1332</strong></div></div><p class="muted">2 prediction records across 2 unique markets. Repeated observations are scored separately; model versions may differ. This small testnet sample is not a profitability claim.</p></section><section id="history"><div class="section-heading"><div><span class="eyebrow">OBSERVATIONS OVER TIME</span><h2>Recent signal history</h2></div><span class="subtle-tag">Latest 15 of 16 records</span></div>
+  <p class="section-intro">Real testnet runs, preserved over time. Signal history alone does not measure resolved-market accuracy.</p>
+  <div class="history-shell"><table><thead><tr><th>Market / observed at</th><th>DreamDEX</th><th>Ensemble</th><th>Signal</th><th>Settlement</th></tr></thead><tbody><tr><td data-label="Market"><b>ETH-0-07SEP26/tUSDC#YES</b><small>2026-09-06 19:33:40 UTC · 0.0.0.10</small></td><td data-label="DreamDEX">84.50%</td><td data-label="Ensemble">62.83%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>BTC-0-07SEP26/tUSDC#YES</b><small>2026-09-06 19:33:15 UTC · 0.0.0.10</small></td><td data-label="DreamDEX">51.00%</td><td data-label="Ensemble">49.94%</td><td data-label="Signal"><span class="badge none">No signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>ETH-0-06SEP26-2000-52DB/tUSDC#YES</b><small>2026-09-06 19:32:26 UTC · 0.0.0.10</small></td><td data-label="DreamDEX">98.00%</td><td data-label="Ensemble">76.41%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>BTC-0-06SEP26-2000-52DA/tUSDC#YES</b><small>2026-09-06 19:31:53 UTC · 0.0.0.10</small></td><td data-label="DreamDEX">98.15%</td><td data-label="Ensemble">61.96%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>ETH-0-06SEP26-2000-5498/tUSDC#YES</b><small>2026-09-06 19:30:43 UTC · 0.0.0.10</small></td><td data-label="DreamDEX">22.40%</td><td data-label="Ensemble">41.95%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>BTC-0-06SEP26-2000-5497/tUSDC#YES</b><small>2026-09-06 19:29:20 UTC · 0.0.0.10</small></td><td data-label="DreamDEX">4.85%</td><td data-label="Ensemble">40.15%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>BTC-0-07SEP26/tUSDC#YES</b><small>2026-09-06 17:53:30 UTC · legacy model</small></td><td data-label="DreamDEX">38.25%</td><td data-label="Ensemble">45.78%</td><td data-label="Signal"><span class="badge none">No signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>ETH-0-07SEP26/tUSDC#YES</b><small>2026-09-06 17:53:30 UTC · legacy model</small></td><td data-label="DreamDEX">73.85%</td><td data-label="Ensemble">59.79%</td><td data-label="Signal"><span class="badge none">No signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>ETH-0-06SEP26-2000/tUSDC#YES</b><small>2026-09-06 17:53:30 UTC · legacy model</small></td><td data-label="DreamDEX">86.35%</td><td data-label="Ensemble">33.31%</td><td data-label="Signal"><span class="badge">Excluded</span></td><td data-label="Settlement">v0.0.0.9 receipt result conflicted with its reasoning conclusion; excluded by v0.0.0.10 review.</td></tr><tr><td data-label="Market"><b>BTC-0-06SEP26-2000/tUSDC#YES</b><small>2026-09-06 17:53:30 UTC · legacy model</small></td><td data-label="DreamDEX">58.55%</td><td data-label="Ensemble">50.71%</td><td data-label="Signal"><span class="badge none">No signal</span></td><td data-label="Settlement">Pending verification</td></tr><tr><td data-label="Market"><b>BTC-0-06SEP26-1800/tUSDC#YES</b><small>2026-09-06 17:53:30 UTC · legacy model</small></td><td data-label="DreamDEX">89.35%</td><td data-label="Ensemble">55.67%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Resolved YES</td></tr><tr><td data-label="Market"><b>ETH-0-06SEP26-1800/tUSDC#YES</b><small>2026-09-06 17:53:30 UTC · legacy model</small></td><td data-label="DreamDEX">98.65%</td><td data-label="Ensemble">73.55%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Resolved YES</td></tr><tr><td data-label="Market"><b>ETH-0-07SEP26/tUSDC#YES</b><small>2026-09-06 16:59:48 UTC · legacy model</small></td><td data-label="DreamDEX">56.35%</td><td data-label="Ensemble">51.43%</td><td data-label="Signal"><span class="badge none">No signal</span></td><td data-label="Settlement">Legacy · no market ID</td></tr><tr><td data-label="Market"><b>BTC-0-07SEP26/tUSDC#YES</b><small>2026-09-06 16:59:48 UTC · legacy model</small></td><td data-label="DreamDEX">29.90%</td><td data-label="Ensemble">46.87%</td><td data-label="Signal"><span class="badge strong">Strong signal</span></td><td data-label="Settlement">Legacy · no market ID</td></tr><tr><td data-label="Market"><b>BTC-0-06SEP26-2000/tUSDC#YES</b><small>2026-09-06 16:59:48 UTC · legacy model</small></td><td data-label="DreamDEX">44.95%</td><td data-label="Ensemble">49.70%</td><td data-label="Signal"><span class="badge none">No signal</span></td><td data-label="Settlement">Legacy · no market ID</td></tr></tbody></table></div></section></main><footer><div class="wrap"><div class="footer-top"><a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 17L8 12L12 15L20 6M14 6H20V12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><strong>EdgeScope</strong><small>DreamDEX Signal Intelligence</small></span></a><div class="footer-links"><a href="https://github.com/os6863/event-contracts/" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a><a href="https://docs.dreamdex.io/developers/event-contracts" target="_blank" rel="noopener noreferrer">DreamDEX <span aria-hidden="true">↗</span></a><a href="https://agents.testnet.somnia.network" target="_blank" rel="noopener noreferrer">Somnia Agents <span aria-hidden="true">↗</span></a></div></div><p>EdgeScope is an analytics and research tool built for the Somnia × DreamDEX Event Contracts Hackathon. It does not place trades. These experimental testnet estimates are not financial advice, audited forecasts or a promise of returns.</p></div></footer>
+<script>(()=>{const cards=[...document.querySelectorAll('[data-signal]')];const buttons=[...document.querySelectorAll('[data-filter]')];for(const button of buttons){button.addEventListener('click',()=>{const value=button.dataset.filter;let count=0;for(const card of cards){card.hidden=value!=='all'&&card.dataset.signal!==value;if(!card.hidden)count++;}for(const other of buttons)other.setAttribute('aria-pressed',String(other===button));document.getElementById('filter-empty').hidden=count!==0||cards.length===0;document.getElementById('board-count').textContent='Showing '+count+' of '+cards.length+' markets';});}})();</script></body></html>
