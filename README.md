@@ -1,185 +1,168 @@
-# EdgeScope — DreamDEX Mispricing & Edge Detector
+# EdgeScope
 
-**Somnia × DreamDEX Event Contracts Hackathon**
+**On-chain mispricing and signal intelligence for DreamDEX Event Contracts, powered by Somnia Agents.**
 
-EdgeScope is a read-only market-intelligence tool for DreamDEX Event Contracts. It compares DreamDEX's own order-book probability with an independently sourced probability estimate produced through Somnia Agents, then surfaces meaningful divergence with verifiable evidence.
+EdgeScope is a read-only analytics tool for DreamDEX Event Contracts on Somnia Shannon. It scans live BTC/ETH binary markets, derives DreamDEX's implied probability from the order book, compares it with independently generated probability estimates, and surfaces meaningful divergences with verifiable Somnia Agent receipts.
 
-**Live report:** https://os6863.github.io/event-contracts/
+## What it does
 
-## Why EdgeScope
+1. Discovers active DreamDEX BTC/ETH Event Contract markets.
+2. Reads opening prices and refreshes the live order book before classification.
+3. Applies a liquidity gate so one-sided or wide-spread books are not treated as reliable probabilities.
+4. Fetches an independent BTC/ETH price through a Somnia JSON API Request Agent.
+5. Computes a deterministic time-scaled probability baseline.
+6. Requests an additional probability estimate from the Somnia LLM Inference Agent.
+7. Verifies the agent result against the receipt and ABI-decoded value.
+8. Classifies divergence from DreamDEX as `strong`, `weak`, or `none`.
+9. Stores a timestamped report and signal history.
+10. After settlement, scores predictions using on-chain outcomes and Brier scores.
 
-A large probability gap is only useful if the inputs are trustworthy. EdgeScope therefore refuses to classify thin books, validates Agent outputs against their receipts, timestamps the exact inputs used for each estimate, and checks settled outcomes on-chain afterward.
+## Why EdgeScope is trustworthy
 
-### Trust by construction
+- **Receipt-checked estimates:** malformed, truncated, out-of-range, or mismatched agent results are rejected.
+- **Liquidity-aware:** only two-sided order books with an acceptable spread are used for signal classification.
+- **Timestamped evidence:** the report preserves the market quote, price observation, model outputs, request ID, and receipt link used for each signal.
+- **On-chain settlement scoring:** resolved outcomes are read from DreamDEX/Somnia state and used to update track-record metrics.
+- **No hidden trading behavior:** EdgeScope is analytics only. It does not place orders or manage user funds.
 
-- **Liquidity gate** — one-sided, empty, or wide-spread books never become a mispricing signal.
-- **Receipt-checked Agent output** — malformed or ABI-mismatched LLM answers are rejected.
-- **Timestamped evidence** — market quote, external price, time remaining, and receipt are preserved per observation.
-- **On-chain outcome verification** — settled predictions are scored with Brier scores.
-- **Unique-market scoring** — repeated observations of one market do not silently dominate the track record.
-- **No automated trading** — EdgeScope analyzes; it does not place orders or manage user funds.
-
-## How it works
+## Architecture
 
 ```text
-DreamDEX Event Contract
-  ├─ opening price
-  ├─ best bid / ask
-  └─ on-chain market state
-            │
-            ▼
-      Liquidity gate
-            │
-      two-sided + tight
-            │
-            ▼
-Somnia JSON API Request Agent
-  └─ independent BTC/ETH price (CoinGecko)
-            │
-            ├──────────────► deterministic time-scaled baseline
-            │
-            ▼
+DreamDEX live markets
+        |
+        v
+Order book + opening price
+        |
+        +--> Liquidity gate
+        |
+        v
+Somnia JSON API Request Agent --> independent BTC/ETH price
+        |
+        +--> deterministic baseline
+        |
+        v
 Somnia LLM Inference Agent
-  └─ probability estimate + verifiable receipt
-            │
-            ▼
-   receipt/result validation
-            │
-            ▼
- baseline + LLM vs DreamDEX probability
-            │
-       strong / weak / none
-            │
-            ▼
- snapshot + history + settlement scoring
+        |
+        +--> receipt + ABI validation
+        |
+        v
+Divergence / agreement classification
+        |
+        v
+Timestamped EdgeScope report + history
+        |
+        v
+On-chain settlement verification + Brier scoring
+```
+
+More detail: [Architecture](docs/ARCHITECTURE.md) · [Methodology](docs/METHODOLOGY.md) · [Demo runbook](docs/DEMO.md)
+
+## Run locally
+
+### Requirements
+
+- Node.js 22+
+- A fresh disposable Somnia Shannon testnet wallet
+- A small amount of testnet STT for Somnia Agent calls
+
+### Install
+
+```bash
+npm ci
+cp .env.example .env
+```
+
+Generate a disposable testnet wallet if needed:
+
+```bash
+npm run generate-wallet
+```
+
+Add its private key to `.env` and fund only that disposable address from the Somnia testnet faucet.
+
+### Verify the build
+
+```bash
+npm run verify
+```
+
+This runs TypeScript type checking and the regression test suite.
+
+### Generate a fresh EdgeScope report
+
+```bash
+npm run report
+```
+
+### Check settled outcomes
+
+```bash
+npm run check-outcomes
+```
+
+### Re-render the saved report without Agent calls
+
+```bash
+npm run render-report
 ```
 
 ## Signal methodology
 
-The deterministic baseline uses a volatility-scaled, time-aware normal-CDF estimate:
+DreamDEX probability is taken from the midpoint of the best bid and ask **only** when both sides exist and the spread is at most 8 percentage points. Otherwise the market is explicitly marked as insufficient liquidity and no mispricing signal is issued.
 
-```text
-sigma_window = sigma_annual × sqrt(minutes_left / minutes_per_year)
-z            = (price_move_% / 100) / sigma_window
-baseline_p   = Phi(z)
-```
+The independent estimate combines:
 
-Current disclosed volatility assumptions are BTC `0.55` and ETH `0.70`. They are not fitted historical estimates.
+- a deterministic probability baseline based on price move, remaining time, and disclosed volatility assumptions; and
+- a Somnia LLM Inference Agent estimate using the same timestamped market inputs.
 
-For classification:
+A signal is:
 
-- **Strong** — both baseline and LLM differ from DreamDEX by at least 15 percentage points in the same direction.
-- **Weak** — at least one clears the 15-point threshold, but the pair does not satisfy the strong condition.
-- **None** — neither clears the threshold.
-- **Insufficient liquidity** — no signal is issued at all.
+- **Strong** when both estimates diverge by at least 15 percentage points from DreamDEX in the same direction.
+- **Weak** when at least one estimate clears the 15-point threshold but the strong condition is not met.
+- **None** otherwise.
 
-The ensemble probability is the simple average of the deterministic baseline and accepted LLM estimate. See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) for assumptions and interpretation limits.
+The deterministic and LLM estimates are **not claimed to be fully independent evidence** because both ultimately use the observed price move. The ensemble is a transparent hackathon signal, not a calibrated financial model.
 
-## Quickstart
+See [docs/METHODOLOGY.md](docs/METHODOLOGY.md) for formulas and interpretation limits.
 
-Requirements: Node.js 18+ and a disposable Somnia Shannon testnet wallet for fresh Agent calls.
+## Track record
 
-```bash
-git clone https://github.com/os6863/event-contracts.git
-cd event-contracts
-npm install
-cp .env.example .env
-npm run generate-wallet
-```
+When a market settles, EdgeScope records the real winning outcome and calculates:
 
-Fund the generated address with free Shannon testnet STT, put only that disposable private key in `.env`, then run:
+- DreamDEX Brier score
+- Ensemble Brier score
+- per-observation averages
+- equal-weighted per-unique-market averages
+- a clearly labeled simulated-edge summary for resolved signals
 
-```bash
-npm run report
-npm run check-outcomes
-```
+The simulated-edge section is **not a backtest or profitability claim**. It ignores fees, slippage, execution, and actual trade size and is shown only as a transparent small-sample diagnostic.
 
-To verify the code and rebuild the published snapshot without new Agent calls:
+## Important limitations
 
-```bash
-npm run verify
-npm run render-report
-```
+- The independent external price input currently comes from CoinGecko through a Somnia Agent. It is **not** claimed to reproduce DreamDEX's multi-source settlement oracle.
+- BTC and ETH volatility inputs in the deterministic baseline are fixed disclosed assumptions, not dynamically fitted estimates.
+- The LLM and deterministic estimates share the same underlying price-move observation.
+- The public report is a reproducible point-in-time snapshot, not a continuously updating trading terminal.
+- This is hackathon/testnet software and has not been audited.
 
-## Cost
+## Documentation
 
-The project is designed for **zero-dollar testnet use**:
-
-| Step | Approximate cost |
-|---|---:|
-| DreamDEX market scan | 0 STT |
-| JSON price Agent | ~0.03 STT per unique asset |
-| LLM inference Agent | ~0.07 STT per market plus platform execution overhead |
-| Outcome checking | read-only |
-
-Use `MAX_MARKETS` in `.env` to cap a fresh run while testing.
-
-## Somnia / DreamDEX integration
-
-| Component | Value |
-|---|---|
-| Network | Somnia Shannon Testnet |
-| Chain ID | `50312` |
-| DreamDEX SDK | `@somnia-chain/markets-sdk` |
-| Somnia Agents contract | `0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776` |
-| JSON API Request Agent | `13174292974160097713` |
-| LLM Inference Agent | `12847293847561029384` |
-| Receipts service | `https://receipts.testnet.agents.somnia.host` |
-
-Agent IDs and testnet endpoints are platform data and may change.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Methodology](docs/METHODOLOGY.md)
+- [Demo runbook](docs/DEMO.md)
+- [SDK / documentation feedback](FEEDBACK.md)
+- [Engineering changelog](CHANGELOG.md)
+- [Security notes](SECURITY.md)
 
 ## Repository layout
 
 ```text
-src/                    final application source and tests
-scripts/                disposable-wallet helper
-data/                   latest snapshot + signal history
-docs/                   GitHub Pages report + technical docs
-.github/workflows/      CI typecheck and tests
-CHANGELOG.md             engineering notes and live bugs caught
-FEEDBACK.md              DreamDEX / SDK documentation feedback
-SECURITY.md              testnet wallet and secret-handling guidance
+src/       application logic, scoring, persistence, renderer, and tests
+scripts/   disposable testnet wallet helper
+data/      latest report snapshot and accumulated signal history
+docs/      GitHub Pages report and judge-facing technical documentation
 ```
 
-## Evidence, not just claims
+## License
 
-The repository includes a growing signal history and an on-chain-settlement track record. The report shows:
-
-- raw DreamDEX quote evidence;
-- liquidity state and spread;
-- baseline and LLM estimates;
-- Agent receipt links;
-- Oracle Explorer resolution links where available;
-- per-observation and per-unique-market Brier scoring;
-- hypothetical flat-stake simulated-edge statistics with explicit sample size.
-
-The simulated-edge section is a transparency diagnostic over a small resolved sample, **not a profitability claim or backtest of executed trades**.
-
-## Important limitations
-
-- CoinGecko is an independent off-chain price input consumed through Somnia Agents. It is **not** claimed to reproduce DreamDEX's multi-source settlement oracle.
-- Agent execution and receipts are verifiable on Somnia; the underlying CoinGecko price itself is not on-chain data.
-- The deterministic baseline and LLM estimate both depend on the same observed price move, so they are not fully independent evidence.
-- Annual volatility inputs are fixed disclosed assumptions rather than dynamically estimated realized volatility.
-- The published report is a reproducible point-in-time snapshot, not a continuously refreshing dashboard.
-- This is unaudited hackathon/testnet software.
-
-## Documentation
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — final data flow and trust boundaries
-- [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — formulas, signal rules, scoring and limitations
-- [`docs/DEMO.md`](docs/DEMO.md) — judge/demo runbook
-- [`CHANGELOG.md`](CHANGELOG.md) — engineering evolution and real bugs caught during testnet development
-- [`FEEDBACK.md`](FEEDBACK.md) — SDK/documentation feedback
-- [`SECURITY.md`](SECURITY.md) — testnet wallet guidance
-
-## Links
-
-- [DoraHacks — Event Contracts Hackathon](https://dorahacks.io/hackathon/event-contracts/detail)
-- [DreamDEX Event Contracts docs](https://docs.dreamdex.io/developers/event-contracts)
-- [Somnia Agents docs](https://docs.somnia.network/agents)
-- [Somnia Agent Explorer](https://agents.testnet.somnia.network)
-
----
-
-Built for the **Somnia × DreamDEX Event Contracts Hackathon**.
+MIT — see [LICENSE](LICENSE).
