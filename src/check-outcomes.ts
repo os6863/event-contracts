@@ -45,4 +45,6 @@ async function main() {
   console.log(`${history.filter(h => h.resolved === true).length} resolved prediction records. ${failures} lookup failure(s).`);
   if (failures) process.exitCode = 1;
 }
-main().catch(error => { console.error(error instanceof Error ? error.message : "Outcome check failed"); process.exitCode = 1; });
+main()
+  .then(() => process.exit(process.exitCode ?? 0))
+  .catch(error => { console.error(error instanceof Error ? error.message : "Outcome check failed"); process.exit(1); });

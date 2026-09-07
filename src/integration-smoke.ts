@@ -40,46 +40,57 @@ async function main() {
   let firstBinaryMarketId: string | null = null;
   let firstUpSymbol: string | null = null;
 
-  await check("RPC reachable (getBlockNumber)", () => publicClient.getBlockNumber().then((n) => Number(n)));
+  // Closing the exchange's WebSocket connection matters here, not just for
+  // tidiness: without it (and without the process.exit() below), a lingering
+  // open handle can block Node from exiting after the script's own work is
+  // done — observed as a 16+ minute "hang" in GitHub Actions on
+  // check-outcomes.ts despite its output showing it had already finished.
+  try {
+    await check("RPC reachable (getBlockNumber)", () => publicClient.getBlockNumber().then((n) => Number(n)));
 
-  await check("Indexer reachable, market discovery returns a shape we recognize (loadMarkets)", async () => {
-    const markets = Object.values(await exchange.loadMarkets(true));
-    let binaryCount = 0;
-    for (const m of markets) {
-      if (!isBinaryMarket(m.info)) continue;
-      binaryCount++;
-      if (!firstBinaryMarketId) { firstBinaryMarketId = m.info.marketId; firstUpSymbol = m.outcomes?.[0]?.symbol ?? null; }
+    await check("Indexer reachable, market discovery returns a shape we recognize (loadMarkets)", async () => {
+      const markets = Object.values(await exchange.loadMarkets(true));
+      let binaryCount = 0;
+      for (const m of markets) {
+        if (!isBinaryMarket(m.info)) continue;
+        binaryCount++;
+        if (!firstBinaryMarketId) { firstBinaryMarketId = m.info.marketId; firstUpSymbol = m.outcomes?.[0]?.symbol ?? null; }
+      }
+      return { totalMarkets: markets.length, binaryMarkets: binaryCount };
+    });
+
+    if (firstBinaryMarketId) {
+      await check("On-chain market state read (getMarketOnchain) — settlement state is reachable", async () => {
+        const onchain = await exchange.client.getMarketOnchain(firstBinaryMarketId as `0x${string}`);
+        return { status: onchain.status, isResolved: onchain.isResolved, isVoided: onchain.isVoided };
+      });
+      await check("Opening prices read (getOpeningPrices)", async () => {
+        const prices = await exchange.client.getOpeningPrices([firstBinaryMarketId as `0x${string}`]);
+        return { found: Object.keys(prices).length > 0 };
+      });
+    } else {
+      console.log("skip On-chain market state / opening price checks — no live binary market found this run");
     }
-    return { totalMarkets: markets.length, binaryMarkets: binaryCount };
-  });
 
-  if (firstBinaryMarketId) {
-    await check("On-chain market state read (getMarketOnchain) — settlement state is reachable", async () => {
-      const onchain = await exchange.client.getMarketOnchain(firstBinaryMarketId as `0x${string}`);
-      return { status: onchain.status, isResolved: onchain.isResolved, isVoided: onchain.isVoided };
-    });
-    await check("Opening prices read (getOpeningPrices)", async () => {
-      const prices = await exchange.client.getOpeningPrices([firstBinaryMarketId as `0x${string}`]);
-      return { found: Object.keys(prices).length > 0 };
-    });
-  } else {
-    console.log("skip On-chain market state / opening price checks — no live binary market found this run");
-  }
-
-  if (firstUpSymbol) {
-    await check("Order book reachable (fetchOrderBook)", async () => {
-      const book = await exchange.fetchOrderBook(firstUpSymbol as string, 1);
-      return { hasBid: book.bids.length > 0, hasAsk: book.asks.length > 0 };
-    });
-  } else {
-    console.log("skip Order book check — no live market symbol found this run");
+    if (firstUpSymbol) {
+      await check("Order book reachable (fetchOrderBook)", async () => {
+        const book = await exchange.fetchOrderBook(firstUpSymbol as string, 1);
+        return { hasBid: book.bids.length > 0, hasAsk: book.asks.length > 0 };
+      });
+    } else {
+      console.log("skip Order book check — no live market symbol found this run");
+    }
+  } finally {
+    await exchange.close();
   }
 
   console.log(failures === 0 ? "\nAll integration checks passed." : `\n${failures} integration check(s) failed.`);
   if (failures > 0) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error("Integration smoke test crashed:", error);
-  process.exitCode = 1;
-});
+main()
+  .then(() => process.exit(process.exitCode ?? 0))
+  .catch((error) => {
+    console.error("Integration smoke test crashed:", error);
+    process.exit(1);
+  });
