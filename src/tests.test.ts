@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ts from "typescript";
-import vm from "node:vm";
 import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
@@ -13,15 +11,39 @@ const id = `0x${"a".repeat(64)}`;
 const row: ReportRow = { symbol: "BTC-TEST", marketId: id, question: "BTC closes above opening", asset: "BTC", openingPrice: 100, currentPrice: 101, movePct: 1, dreamdexUp: .3, naiveEst: .7, llmEst: .65, ensembleEst: .675, llmStatus: "ok", divergence: .375, flagged: true, agreement: "strong", thinking: "Original model explanation", reasoningTruncated: false, observedAt: "2026-09-06T20:00:00Z" };
 const entry: HistoryEntry = { timestamp: row.observedAt!, symbol: row.symbol, marketId: id, asset: "BTC", dreamdexUp: .3, naiveEst: .7, llmEst: .65, ensembleEst: .675, divergence: .375, agreement: "strong" };
 
-test("v9 baseline and agreement remain identical across a grid of inputs", async () => {
-  const source = await readFile(new URL("../v0.0.0.9/mispricing-report.ts", import.meta.url), "utf-8");
-  const extracted = 'const MISPRICING_ALERT_THRESHOLD=0.15;\n' + source.slice(source.indexOf("const ASSET_ANNUAL_VOLATILITY"), source.indexOf("function escapeHtml"));
-  const context = vm.createContext({});
-  vm.runInContext(ts.transpileModule(extracted, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
+// Frozen pre-refactor baseline. Keeping the reference implementation in this
+// test preserves the regression guarantee without requiring deleted version
+// snapshot folders to remain in the production repository.
+const baselineVol: Record<string, number> = { BTC: 0.55, ETH: 0.7 };
+function baselineNormalCDF(z: number): number {
+  const sign = z < 0 ? -1 : 1;
+  const x = Math.abs(z) / Math.SQRT2;
+  const t = 1 / (1 + 0.3275911 * x);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t) * Math.exp(-x * x);
+  return 0.5 * (1 + sign * y);
+}
+function baselineNaiveProbability(movePct: number, minutesLeft: number, asset: string): number {
+  const sigmaAnnual = baselineVol[asset] ?? 0.6;
+  const tYears = Math.max(minutesLeft, 1) / (60 * 24 * 365);
+  const raw = baselineNormalCDF((movePct / 100) / (sigmaAnnual * Math.sqrt(tYears)));
+  return Math.min(0.98, Math.max(0.02, raw));
+}
+function baselineAgreement(naiveEst: number, llmEst: number, dreamdexUp: number) {
+  const naiveDiv = naiveEst - dreamdexUp;
+  const llmDiv = llmEst - dreamdexUp;
+  const naiveFlagged = Math.abs(naiveDiv) >= 0.15;
+  const llmFlagged = Math.abs(llmDiv) >= 0.15;
+  const sameDirection = Math.sign(naiveDiv) === Math.sign(llmDiv);
+  if (naiveFlagged && llmFlagged && sameDirection) return "strong";
+  if (naiveFlagged || llmFlagged) return "weak";
+  return "none";
+}
+
+test("pre-refactor baseline and agreement remain identical across a grid of inputs", () => {
   for (const asset of ["BTC", "ETH", "OTHER"]) for (const minutes of [0, 1, 15, 60, 240, 1440]) for (const move of [-2, -.5, 0, .5, 2]) {
-    assert.equal(naiveProbability(move, minutes, asset), context.naiveProbability(move, minutes, asset));
+    assert.equal(naiveProbability(move, minutes, asset), baselineNaiveProbability(move, minutes, asset));
   }
-  for (const naive of [.1,.3,.5,.7,.9]) for (const llm of [.1,.3,.5,.7,.9]) for (const market of [.1,.3,.5,.7,.9]) assert.equal(computeAgreement(naive,llm,market), context.computeAgreement(naive,llm,market));
+  for (const naive of [.1,.3,.5,.7,.9]) for (const llm of [.1,.3,.5,.7,.9]) for (const market of [.1,.3,.5,.7,.9]) assert.equal(computeAgreement(naive,llm,market), baselineAgreement(naive,llm,market));
 });
 test("CDF reference and time direction", () => {
   assert.ok(Math.abs(normalCDF(1.96) - .9750021) < 1e-6);
@@ -35,7 +57,6 @@ test("malformed final response can never turn into probability zero", () => {
   assert.throws(() => validateLlmResult(10001n,"10001"));
   assert.throws(() => validateLlmResult(-1n,"-1"));
   assert.equal(validateLlmResult(6500n,"6500"), .65);
-  // Zero remains a legitimate answer when explicitly present and matched; no arbitrary clamping.
   assert.equal(validateLlmResult(0n,"0"), 0);
 });
 test("remaining time uses the observation clock rather than scan headroom", () => {
@@ -59,33 +80,27 @@ test("real binary outcome math and invalid outcomes", () => {
   assert.throws(()=>settleEntries([{...entry}],{isVoided:false,isResolved:true,winningOutcome:2}));
 });
 test("simulated edge only counts resolved, signaled trades and picks the diverged side", () => {
-  // entry: dreamdexUp .3, ensembleEst .675 -> divergence +.375 -> backs UP, cost .3
   const strongWin = {...entry, resolved: true as const, actualOutcome: "YES" as const};
   const summary1 = computeSimulatedEdge([strongWin]);
   assert.equal(summary1.strong!.n, 1); assert.equal(summary1.strong!.wins, 1);
   assert.ok(Math.abs(summary1.strong!.totalPayoff - 0.7) < 1e-9);
   assert.ok(Math.abs(summary1.strong!.avgReturnPct - (0.7/0.3)) < 1e-9);
   assert.equal(summary1.weak, null);
-
   const strongLoss = {...entry, resolved: true as const, actualOutcome: "NO" as const};
   const summary2 = computeSimulatedEdge([strongLoss]);
   assert.equal(summary2.strong!.wins, 0); assert.ok(Math.abs(summary2.strong!.totalPayoff - (-0.3)) < 1e-9);
-
-  // Negative divergence backs DOWN: dreamdexUp .9, ensembleEst .7 -> divergence -.2, cost = 1-.9 = .1
   const backsDown = {...entry, dreamdexUp: .9, ensembleEst: .7, divergence: -.2, agreement: "weak" as const, resolved: true as const, actualOutcome: "NO" as const};
   const summary3 = computeSimulatedEdge([backsDown]);
   assert.equal(summary3.weak!.n, 1); assert.equal(summary3.weak!.wins, 1);
   assert.ok(Math.abs(summary3.weak!.totalPayoff - 0.9) < 1e-9);
   assert.equal(summary3.strong, null);
-
-  // Excluded: no signal, not resolved, invalidated, zero divergence, zero-cost side.
   const excluded = [
     {...entry, agreement: "none" as const, resolved: true as const, actualOutcome: "YES" as const},
     {...entry, resolved: undefined, actualOutcome: undefined},
     {...entry, resolved: "voided" as const},
     {...entry, invalidated: true, resolved: true as const, actualOutcome: "YES" as const},
     {...entry, divergence: 0, resolved: true as const, actualOutcome: "YES" as const},
-    {...entry, dreamdexUp: 0, divergence: .5, resolved: true as const, actualOutcome: "YES" as const}, // backs UP at cost 0
+    {...entry, dreamdexUp: 0, divergence: .5, resolved: true as const, actualOutcome: "YES" as const},
   ];
   const summaryEmpty = computeSimulatedEdge(excluded);
   assert.equal(summaryEmpty.strong, null); assert.equal(summaryEmpty.weak, null); assert.equal(summaryEmpty.combined, null);
@@ -125,10 +140,8 @@ test("oracle explorer link renders only for a valid decimal question id", () => 
 test("liquidity classification: tight two-sided ok, wide-spread and one-sided both rejected as a probability source", () => {
   const tight = classifyLiquidity(.3, .35);
   assert.equal(tight.state, "ok"); assert.ok(Math.abs(tight.spread! - .05) < 1e-9);
-  const under = classifyLiquidity(.46, .53); // spread .07, clearly under threshold
-  assert.equal(under.state, "ok");
-  const over = classifyLiquidity(.45, .54); // spread .09, clearly over threshold
-  assert.equal(over.state, "wide-spread");
+  const under = classifyLiquidity(.46, .53); assert.equal(under.state, "ok");
+  const over = classifyLiquidity(.45, .54); assert.equal(over.state, "wide-spread");
   const wide = classifyLiquidity(.2, .8);
   assert.equal(wide.state, "wide-spread"); assert.ok(Math.abs(wide.spread! - .6) < 1e-9);
   assert.deepEqual(classifyLiquidity(undefined, .95), { state: "one-sided", spread: null });
@@ -137,8 +150,6 @@ test("liquidity classification: tight two-sided ok, wide-spread and one-sided bo
 });
 test("unique-market Brier equal-weights markets, not observations", () => {
   const marketA = "0x" + "a".repeat(64), marketB = "0x" + "b".repeat(64);
-  // Market A logged 3 times with Brier .01/.01/.01 (mean .01); market B logged once with Brier .81.
-  // Observation-level would be skewed toward A (4 rows, 3 from A); per-market must weight A and B equally: (.01 + .81)/2 = .41.
   const history: HistoryEntry[] = [
     {...entry, marketId: marketA, resolved: true, dreamdexBrier: .01},
     {...entry, marketId: marketA, resolved: true, dreamdexBrier: .01},
@@ -148,7 +159,6 @@ test("unique-market Brier equal-weights markets, not observations", () => {
   const summary = computeUniqueMarketBrier(history, "dreamdexBrier");
   assert.equal(summary!.n, 4); assert.equal(summary!.uniqueMarkets, 2);
   assert.ok(Math.abs(summary!.avgPerMarket - .41) < 1e-9);
-  // Excluded: invalidated, unresolved, missing marketId, non-finite score.
   const excluded: HistoryEntry[] = [
     {...entry, marketId: marketA, resolved: true, invalidated: true, dreamdexBrier: .01},
     {...entry, marketId: marketA, resolved: undefined, dreamdexBrier: .01},
@@ -188,7 +198,6 @@ test("empty report, missing reasoning and invalid numbers render safely", async 
   const html=renderReport([],[],row.observedAt!);assert.ok(html.includes("No active signal data"));assert.ok(html.includes("No verified settlement"));
   const failed=renderReport([{...row,llmStatus:"failed",llmEst:NaN,ensembleEst:Infinity,thinking:null,divergence:null}],[],row.observedAt!);
   assert.ok(!failed.includes('>NaN<'));assert.ok(!failed.includes('>Infinity<'));
-  // Fixtures never overwrite the public report or real history.
   await mkdir(new URL("./output/",import.meta.url),{recursive:true});
   await writeFile(new URL("./output/test-states.html",import.meta.url),renderReport([row,{...row,symbol:"WEAK",agreement:"weak"},{...row,symbol:"NONE",agreement:"none"},{...row,symbol:"FAILED",llmStatus:"failed",llmEst:null,ensembleEst:null,divergence:null},{...row,symbol:"SKIPPED",llmStatus:"skipped"},{...row,symbol:"EXPIRED",llmStatus:"expired"}], [entry],row.observedAt!));
   await writeFile(new URL("./output/test-empty.html",import.meta.url),html);
