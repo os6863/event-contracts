@@ -1,255 +1,185 @@
-# Event Contracts — Mispricing & Edge Detector
+# EdgeScope — DreamDEX Mispricing & Edge Detector
 
 **Somnia × DreamDEX Event Contracts Hackathon**
 
-An analytics tool — not a trading bot — that scans live DreamDEX Event
-Contract markets (Up/Down prediction markets on BTC/ETH), compares each
-market's own implied probability against an independent probability
-estimate, and surfaces markets where the two disagree by a meaningful
-margin.
+EdgeScope is a read-only market-intelligence tool for DreamDEX Event Contracts. It compares DreamDEX's own order-book probability with an independently sourced probability estimate produced through Somnia Agents, then surfaces meaningful divergence with verifiable evidence.
 
-The independent estimate isn't a number our own backend just claims to
-have computed. It's a **verifiably executed Somnia Agent estimate based
-on independently sourced market data**: two real Somnia Agents —
-consensus-validated, on-chain compute jobs — chained together, one
-fetching a live price, the other (an LLM) reasoning about it. The
-*execution and receipt* are verifiable on-chain; the underlying price
-input (CoinGecko) is not itself on-chain data, and is not claimed to
-match DreamDEX's own multi-source settlement oracle — see "What this
-project is not" for why that's a deliberate, disclosed choice rather
-than an attempt to replicate DreamDEX's settlement reference.
+**Live report:** https://os6863.github.io/event-contracts/
 
-## Cost
+## Why EdgeScope
 
-**Zero dollars.** Everything runs on testnet:
-- DreamDEX: Somnia Shannon Testnet (chain 50312), tUSDC collateral
-- Somnia Agents: same testnet, gas paid in free STT
-- External price data: CoinGecko's free tier (no key)
+A large probability gap is only useful if the inputs are trustworthy. EdgeScope therefore refuses to classify thin books, validates Agent outputs against their receipts, timestamps the exact inputs used for each estimate, and checks settled outcomes on-chain afterward.
 
-The only "cost" is free testnet STT, obtained from a faucet (see
-Setup below).
+### Trust by construction
+
+- **Liquidity gate** — one-sided, empty, or wide-spread books never become a mispricing signal.
+- **Receipt-checked Agent output** — malformed or ABI-mismatched LLM answers are rejected.
+- **Timestamped evidence** — market quote, external price, time remaining, and receipt are preserved per observation.
+- **On-chain outcome verification** — settled predictions are scored with Brier scores.
+- **Unique-market scoring** — repeated observations of one market do not silently dominate the track record.
+- **No automated trading** — EdgeScope analyzes; it does not place orders or manage user funds.
 
 ## How it works
 
+```text
+DreamDEX Event Contract
+  ├─ opening price
+  ├─ best bid / ask
+  └─ on-chain market state
+            │
+            ▼
+      Liquidity gate
+            │
+      two-sided + tight
+            │
+            ▼
+Somnia JSON API Request Agent
+  └─ independent BTC/ETH price (CoinGecko)
+            │
+            ├──────────────► deterministic time-scaled baseline
+            │
+            ▼
+Somnia LLM Inference Agent
+  └─ probability estimate + verifiable receipt
+            │
+            ▼
+   receipt/result validation
+            │
+            ▼
+ baseline + LLM vs DreamDEX probability
+            │
+       strong / weak / none
+            │
+            ▼
+ snapshot + history + settlement scoring
 ```
- DreamDEX indexer                Somnia Agents platform
-┌──────────────────┐   ┌─────────────────────────────────────────┐
-│  live Up/Down     │   │  JSON API Request agent                  │
-│  markets, order   │   │   → fetches BTC/ETH price from CoinGecko │
-│  book, opening    │   │     (3 validators reach consensus)       │
-│  price            │   │                                          │
-└─────────┬─────────┘   │  LLM Inference agent (Qwen3-30B)         │
-          │             │   → given opening price, current price,  │
-          │             │     % move, time remaining → estimates   │
-          │             │     probability of YES, with reasoning   │
-          │             └───────────────────┬───────────────────────┘
-          │                                 │
-          └───────────────┬─────────────────┘
-                           ▼
-              compare DreamDEX's own implied
-              probability vs. the Agent-derived
-              estimate → flag large divergence
-                           │
-                           ▼
-              console table + styled HTML report
+
+## Signal methodology
+
+The deterministic baseline uses a volatility-scaled, time-aware normal-CDF estimate:
+
+```text
+sigma_window = sigma_annual × sqrt(minutes_left / minutes_per_year)
+z            = (price_move_% / 100) / sigma_window
+baseline_p   = Phi(z)
 ```
 
-## Formulas
+Current disclosed volatility assumptions are BTC `0.55` and ETH `0.70`. They are not fitted historical estimates.
 
-**Naive baseline** — a volatility-scaled, time-aware estimate (not a
-plain linear guess; see [v0.0.0.9/CHANGES.md](v0.0.0.9/CHANGES.md) for
-why the earlier linear version was wrong):
+For classification:
 
-```
-σ_window = σ_annual(asset) × √(minutes_left / minutes_per_year)
-z        = (price_move_% / 100) / σ_window
-naive_p  = Φ(z)                          — Φ = standard normal CDF
-```
-`σ_annual` is an assumed constant per asset (BTC 0.55, ETH 0.70) — not
-fitted from historical price data, which this project doesn't collect.
-The `√t` scaling matches standard random-walk / Black-Scholes practice:
-the same % move is far more significant with little time left than with
-a lot of time left.
+- **Strong** — both baseline and LLM differ from DreamDEX by at least 15 percentage points in the same direction.
+- **Weak** — at least one clears the 15-point threshold, but the pair does not satisfy the strong condition.
+- **None** — neither clears the threshold.
+- **Insufficient liquidity** — no signal is issued at all.
 
-**LLM estimate** — from the Somnia LLM Inference agent (Qwen3-30B),
-prompted with the same opening price, current price, % move, and time
-remaining, plus calibration anchor points (see
-[v0.0.0.4/CHANGES.md](v0.0.0.4/CHANGES.md) for how those anchors were
-tuned against real miscalibration bugs).
+The ensemble probability is the simple average of the deterministic baseline and accepted LLM estimate. See [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) for assumptions and interpretation limits.
 
-**Ensemble & divergence:**
-```
-ensemble_p = (naive_p + llm_p) / 2
-divergence = ensemble_p − dreamdex_implied_p
-```
-A market is flagged **strong** only when both `naive_p` and `llm_p`
-individually diverge from DreamDEX's price by ≥ 0.15 **in the same
-direction** — not just the averaged ensemble. **weak** means only one of
-the two diverges. See
-[v0.0.0.7/CHANGES.md](v0.0.0.7/CHANGES.md) for the real case (an LLM
-call returning 0.99 for a market that had moved *down*) this guard was
-built to catch.
+## Quickstart
 
-## Somnia testnet details
-
-| | |
-|---|---|
-| Chain | Somnia Shannon Testnet, chain id `50312` |
-| Somnia Agents platform contract | `0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776` |
-| JSON API Request agent id | `13174292974160097713` |
-| LLM Inference agent id | `12847293847561029384` |
-| Receipts Service | `https://receipts.testnet.agents.somnia.host` |
-| DreamDEX indexer (via SDK) | `https://dev.smk.somnia.host/v1/graphql` |
-| Agent Explorer | https://agents.testnet.somnia.network |
-
-Agent ids and the venue id used to filter DreamDEX's markets are
-platform data, not guaranteed permanent — see
-[v0.0.0.1/CHANGES.md](v0.0.0.1/CHANGES.md) and
-[v0.0.0.2/CHANGES.md](v0.0.0.2/CHANGES.md) for what to do if a script
-ever reports zero markets/agents unexpectedly (the scripts have
-built-in discovery fallbacks for exactly this).
-
-## Quickstart (run the current version)
+Requirements: Node.js 18+ and a disposable Somnia Shannon testnet wallet for fresh Agent calls.
 
 ```bash
 git clone https://github.com/os6863/event-contracts.git
 cd event-contracts
 npm install
 cp .env.example .env
-```
-
-Two setup steps before the first real run:
-
-**1. Get a wallet.** Read-only steps (scanning markets) don't need one,
-but every version from v0.0.0.2 onward writes to the chain and needs a
-funded, disposable testnet wallet:
-```bash
 npm run generate-wallet
 ```
-This prints a fresh address and private key — never reuse a real wallet
-here. Paste the private key into `.env` as `PRIVATE_KEY`.
 
-**2. Fund it with free testnet STT.** The most reliable faucet found
-during development is Google Cloud's:
-https://cloud.google.com/application/web3/faucet/somnia/shannon —
-paste the printed address, no wallet connection needed. Get **several
-STT**, not just one drip — a full run of the latest version costs
-roughly 1.5-2 STT (see Cost breakdown below).
+Fund the generated address with free Shannon testnet STT, put only that disposable private key in `.env`, then run:
 
-**3. Run the latest version:**
 ```bash
-npm run mispricing-report-v5
+npm run report
 npm run check-outcomes
 ```
-Then open `v0.0.0.10/output/report.html` in a browser, or — once GitHub
-Pages is enabled on this repo (Settings → Pages → Deploy from branch →
-`main` → `/docs`) — view the live version at
-`https://os6863.github.io/event-contracts/`, no cloning required.
-Run `check-outcomes` again periodically as logged markets close, to
-grow the real, Brier-scored track record.
 
-## Versioned development history
+To verify the code and rebuild the published snapshot without new Agent calls:
 
-Each stage of this project is a self-contained folder — the code plus
-a `CHANGES.md` describing what it does, why it exists, and (honestly)
-every real bug a live run caught before moving on. Every version was
-independently re-reviewed against a second source before advancing, and
-every fix below was found by running real code against the real
-testnet, not by guessing.
+```bash
+npm run verify
+npm run render-report
+```
 
-| Version | What it adds | Real bugs caught before advancing |
-|---|---|---|
-| [v0.0.0.1](v0.0.0.1/CHANGES.md) | Read-only scanner for live DreamDEX markets | Missing venue filter on a shared indexer (would have mixed in unrelated markets); a fixed expiry-headroom threshold that breaks on short-cadence markets |
-| [v0.0.0.2](v0.0.0.2/CHANGES.md) | On-chain BTC/ETH price via a real Somnia Agent (JSON API Request) | A destructuring bug that would crash on the first real response; on-chain request data gets pruned right after finalization (switched to the official Receipts Service); a single hardcoded RPC can go down (added multi-URL fallback) |
-| [v0.0.0.3](v0.0.0.3/CHANGES.md) | First real mispricing signal (DreamDEX vs. price move) | A market field (`strike`) that reads as `0` for this market type; the real fix was a different SDK call (`getOpeningPrices`) |
-| [v0.0.0.4](v0.0.0.4/CHANGES.md) | Naive formula replaced by a genuine LLM (Qwen3-30B) probability estimate | Wrong field name for the model's reasoning text; a qualitative calibration prompt that over/under-corrected twice before numeric anchor points fixed it; one shared timeout that was fine for a fast agent and far too short for a slow one |
-| [v0.0.0.5](v0.0.0.5/CHANGES.md) | Presentable HTML report for the demo, plus full (untruncated) AI reasoning | The Receipts Service's fast preview mode replaces long fields with a placeholder instead of a snippet — added a follow-up fetch for the complete text |
-| [v0.0.0.6](v0.0.0.6/CHANGES.md) | Final polish — no new detection logic | Whole-repo re-review (all versions type-checked together); this README hadn't been updated since v0.0.0.1 and still described only the read-only scanner; caught that `package.json`'s `^0.28.1` range could never resolve to the docs' newly-required `0.29.0` floor |
-| [v0.0.0.7](v0.0.0.7/CHANGES.md) | Ensemble signal (naive + LLM cross-validated), a growing signal history, and a live GitHub Pages report | An LLM outlier (`0.99` for a market that moved *down*) would have produced a false "strong" signal alone — the ensemble check downgrades it to "weak" since the naive baseline disagrees |
-| [v0.0.0.8](v0.0.0.8/CHANGES.md) | Real outcome verification against on-chain settlement + Brier-scored track record | None — this version's own honest limitation is that it can't validate against a real settled market until one actually closes, which needs elapsed time, not more code |
-| [v0.0.0.9](v0.0.0.9/CHANGES.md) | Time-aware (√t-scaled) naive baseline replacing the old fixed-linear formula; structured AI reasoning output | The naive formula had ignored time-to-expiry entirely since v0.0.0.3 — same % move always gave the same estimate whether 15 minutes or 24 hours remained, caught by external review |
-| [v0.0.0.10](v0.0.0.10/CHANGES.md) | Receipt-checked estimates, timestamped inputs, safe legacy history, and the responsive EdgeScope report | A successful receipt decoded to `0` while its reasoning concluded `6500`; v10 rejects mismatched/malformed final answers and never promotes them to signals |
+## Cost
 
-Running an earlier version still works — each folder is complete on
-its own (`cd` into it isn't required; the root `package.json` has a
-script per version). See each version's own `CHANGES.md` for exact run
-instructions and sample output.
+The project is designed for **zero-dollar testnet use**:
 
-## Cost breakdown (per full run of v0.0.0.10; `check-outcomes` is free/read-only)
+| Step | Approximate cost |
+|---|---:|
+| DreamDEX market scan | 0 STT |
+| JSON price Agent | ~0.03 STT per unique asset |
+| LLM inference Agent | ~0.07 STT per market plus platform execution overhead |
+| Outcome checking | read-only |
 
-| Step | Somnia Agent calls | Approx. STT |
-|---|---|---|
-| Scan live markets | 0 (read-only) | 0 |
-| Fetch BTC/ETH price | 1 per unique asset (~2) | ~0.24 |
-| LLM probability estimate | 1 per live market (~6) | ~1.44 |
-| **Total** | | **~1.7 STT** |
+Use `MAX_MARKETS` in `.env` to cap a fresh run while testing.
 
-All free testnet STT — set `MAX_MARKETS` in `.env` to cap cost while
-testing.
+## Somnia / DreamDEX integration
 
-## Tech stack
+| Component | Value |
+|---|---|
+| Network | Somnia Shannon Testnet |
+| Chain ID | `50312` |
+| DreamDEX SDK | `@somnia-chain/markets-sdk` |
+| Somnia Agents contract | `0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776` |
+| JSON API Request Agent | `13174292974160097713` |
+| LLM Inference Agent | `12847293847561029384` |
+| Receipts service | `https://receipts.testnet.agents.somnia.host` |
 
-- **DreamDEX**: `@somnia-chain/markets-sdk` (TypeScript)
-- **Somnia Agents**: JSON API Request (price) + LLM Inference (Qwen3-30B, probability estimate)
-- **Chain interaction**: `viem`
-- **Runtime**: Node.js 18+, `tsx` (no build step)
+Agent IDs and testnet endpoints are platform data and may change.
 
-## What this project is *not*
+## Repository layout
 
-- Not a trading bot — read-only analysis, no order placement, and no
-  "trade this" link. A public DreamDEX trading interface exists at
-  `app.dreamdex.io`, but linking to it correctly would require
-  confirming the exact URL mapping from this project's testnet symbols
-  to the app's own market paths, and confirming a testnet version of
-  the app exists (the one found was mainnet, quoting mainnet USDso
-  prices — this project trades tUSDC on testnet). A guessed mapping
-  would risk sending someone to the wrong market or the wrong network,
-  which this project treats as a real bug, not a missing feature.
-- Not a live-updating dashboard, by design — and worth stating as a
-  positive, not just a limitation: each generated report is an
-  immutable, reproducible market-intelligence snapshot, not a live feed
-  that could show a judge something different five minutes from now.
-  The trade-off is real, though — `npm run mispricing-report-v5` (or
-  the current latest script) followed by a commit/push is what
-  refreshes it. A true auto-refreshing version would need either a
-  scheduled job holding `PRIVATE_KEY` in CI secrets, or every visitor
-  paying their own Somnia Agent calls from their own wallet — both are
-  larger scope changes than the remaining time before this hackathon's
-  deadline could responsibly absorb without introducing an untested new
-  failure mode.
-- The naive/LLM probability estimates are not calibrated financial
-  models; they exist to demonstrate a verifiable on-chain AI signal,
-  not to be traded on directly. `ASSET_ANNUAL_VOLATILITY` in
-  v0.0.0.10's naive formula is an assumed constant, not fitted from real
-  price history. The two estimates are also not fully independent
-  evidence of each other: both are ultimately functions of the same
-  observed price move (the naive formula directly; the LLM prompt is
-  seeded with move-based calibration anchors) — "both estimates agree"
-  should be read as "the same underlying signal cleared a threshold
-  twice," not as two unrelated models converging.
-- `dreamdexUp` (DreamDEX's own implied probability) is not simply
-  "whatever CoinGecko says" reflected back — it's independently read
-  from DreamDEX's own order book, and as of the liquidity gate below,
-  only trusted when that book is actually two-sided and reasonably
-  tight. Separately, the *independent* price input this project
-  compares against (CoinGecko) is not claimed to equal DreamDEX's own
-  multi-source settlement oracle reference — the two can and do diverge
-  briefly, especially late in a market's window. That's the intended
-  design (an outside reference is only useful if it isn't just a copy
-  of the thing being checked), not a bug, but it does mean this
-  project's "mispricing" signal is a divergence from one independent
-  reference, not a certified divergence from DreamDEX's actual
-  settlement mechanism.
-- Below `MAX_SPREAD_FOR_SIGNAL` liquidity, no signal is issued at all
-  (see `analysis.ts::classifyLiquidity`) — a one-sided or wide-spread
-  book is a real number but not a trustworthy market probability, and
-  is never treated as one for classification, even though the raw
-  quote is still shown for transparency.
-- Not audited — this is hackathon/testnet code.
+```text
+src/                    final application source and tests
+scripts/                disposable-wallet helper
+data/                   latest snapshot + signal history
+docs/                   GitHub Pages report + technical docs
+.github/workflows/      CI typecheck and tests
+CHANGELOG.md             engineering notes and live bugs caught
+FEEDBACK.md              DreamDEX / SDK documentation feedback
+SECURITY.md              testnet wallet and secret-handling guidance
+```
+
+## Evidence, not just claims
+
+The repository includes a growing signal history and an on-chain-settlement track record. The report shows:
+
+- raw DreamDEX quote evidence;
+- liquidity state and spread;
+- baseline and LLM estimates;
+- Agent receipt links;
+- Oracle Explorer resolution links where available;
+- per-observation and per-unique-market Brier scoring;
+- hypothetical flat-stake simulated-edge statistics with explicit sample size.
+
+The simulated-edge section is a transparency diagnostic over a small resolved sample, **not a profitability claim or backtest of executed trades**.
+
+## Important limitations
+
+- CoinGecko is an independent off-chain price input consumed through Somnia Agents. It is **not** claimed to reproduce DreamDEX's multi-source settlement oracle.
+- Agent execution and receipts are verifiable on Somnia; the underlying CoinGecko price itself is not on-chain data.
+- The deterministic baseline and LLM estimate both depend on the same observed price move, so they are not fully independent evidence.
+- Annual volatility inputs are fixed disclosed assumptions rather than dynamically estimated realized volatility.
+- The published report is a reproducible point-in-time snapshot, not a continuously refreshing dashboard.
+- This is unaudited hackathon/testnet software.
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — final data flow and trust boundaries
+- [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — formulas, signal rules, scoring and limitations
+- [`docs/DEMO.md`](docs/DEMO.md) — judge/demo runbook
+- [`CHANGELOG.md`](CHANGELOG.md) — engineering evolution and real bugs caught during testnet development
+- [`FEEDBACK.md`](FEEDBACK.md) — SDK/documentation feedback
+- [`SECURITY.md`](SECURITY.md) — testnet wallet guidance
 
 ## Links
 
-- [DoraHacks hackathon page](https://dorahacks.io/hackathon/event-contracts/detail)
+- [DoraHacks — Event Contracts Hackathon](https://dorahacks.io/hackathon/event-contracts/detail)
 - [DreamDEX Event Contracts docs](https://docs.dreamdex.io/developers/event-contracts)
 - [Somnia Agents docs](https://docs.somnia.network/agents)
-- [Somnia Agent Explorer (testnet)](https://agents.testnet.somnia.network)
+- [Somnia Agent Explorer](https://agents.testnet.somnia.network)
+
+---
+
+Built for the **Somnia × DreamDEX Event Contracts Hackathon**.
