@@ -1,5 +1,5 @@
-/** v0.0.0.10: receipt-checked estimates, timestamped snapshots, EdgeScope renderer. */
-import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf } from "./analysis.js";
+/** EdgeScope report pipeline: receipt-checked estimates, timestamped snapshots, HTML renderer. */
+import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs } from "./analysis.js";
 import type { ReportRow } from "./types.js";
 import { appendSignalHistory, readHistory } from "./history.js";
 import { writeReport } from "./report-ui.js";
@@ -26,9 +26,9 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 
 // --- DreamDEX config (same as v0.0.0.1 / v0.0.0.3) -----------------------
-const INDEXER_URL =
+export const INDEXER_URL =
   process.env.SOMNIA_INDEXER_URL ?? "https://dev.smk.somnia.host/v1/graphql";
-const WS_RPC_URL =
+export const WS_RPC_URL =
   process.env.SOMNIA_WS_RPC_URL ?? "wss://api.infra.testnet.somnia.network/ws";
 const VENUE_ID = process.env.SOMNIA_VENUE_ID;
 const MIN_HEADROOM_FRACTION = 0.1;
@@ -36,7 +36,7 @@ const MIN_HEADROOM_FLOOR_SECONDS = 60;
 const STATUS_TRADING = 1;
 
 // --- Somnia Agents platform config (same as v0.0.0.2 / v0.0.0.3) --------
-const RPC_URLS = (
+export const RPC_URLS = (
   process.env.SOMNIA_AGENT_RPC_URLS ??
   "https://dream-rpc.somnia.network/,https://api.infra.testnet.somnia.network/"
 )
@@ -350,6 +350,36 @@ async function fetchPriceFromSource(
 
 type MultiSourcePriceResult = { price: number; sources: string[]; failed: { name: string; error: string }[] };
 
+// --- Realized volatility (new: replaces the fixed disclosed constant when available) ---
+// Historical candles for realized volatility are NOT fetched through a Somnia
+// Agent: unlike the point-in-time price (which is evidence a report claim
+// rests on and must be independently verifiable), this is a model
+// calibration input — how volatile has this asset actually been, not what
+// is its price right now. A plain HTTPS call to Binance's public klines
+// endpoint is honest about what it is: an off-chain statistical input, not
+// an on-chain-verified fact. USE_REALIZED_VOLATILITY defaults on; set it to
+// "false" to revert to the fixed disclosed constant with no code change.
+const USE_REALIZED_VOLATILITY = process.env.USE_REALIZED_VOLATILITY !== "false";
+const REALIZED_VOL_SYMBOLS: Record<string, string> = { BTC: "BTCUSDT", ETH: "ETHUSDT" };
+const REALIZED_VOL_INTERVAL_MINUTES = 60; // "1h" candles
+const REALIZED_VOL_LOOKBACK_CANDLES = 168; // 7 days of hourly candles
+
+async function fetchRealizedVolatility(asset: string): Promise<number | null> {
+  const symbol = REALIZED_VOL_SYMBOLS[asset];
+  if (!symbol) return null;
+  try {
+    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${REALIZED_VOL_LOOKBACK_CANDLES}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const klines = await res.json();
+    if (!Array.isArray(klines)) return null;
+    const closes = klines.map((k) => Number(k[4])).filter((n) => Number.isFinite(n) && n > 0);
+    return computeRealizedVolatility(closes, REALIZED_VOL_INTERVAL_MINUTES);
+  } catch {
+    return null; // network error, timeout, or malformed response — silently fall back to the static assumption
+  }
+}
+
 /**
  * Queries every configured source for `asset` through independent on-chain
  * Agent calls and takes the median of whichever succeed. Deliberately
@@ -489,9 +519,12 @@ async function scanLiveMarkets(exchange: InstanceType<typeof SomniaMarkets>): Pr
   return results;
 }
 
+const INDEXER_RETRY_ATTEMPTS = Number(process.env.INDEXER_RETRY_ATTEMPTS ?? 5);
+const INDEXER_RETRY_BASE_DELAY_MS = Number(process.env.INDEXER_RETRY_BASE_DELAY_MS ?? 3_000);
+
 async function scanLiveMarketsWithRetry(
   exchange: InstanceType<typeof SomniaMarkets>,
-  attempts = 3
+  attempts = INDEXER_RETRY_ATTEMPTS
 ): Promise<ScannedMarket[]> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -500,8 +533,8 @@ async function scanLiveMarketsWithRetry(
     } catch (error) {
       lastError = error;
       if (attempt === attempts) break;
-      const delayMs = attempt * 2_000;
-      console.log(`DreamDEX indexer read failed (attempt ${attempt}/${attempts}); retrying in ${delayMs / 1000}s...`);
+      const delayMs = indexerBackoffDelayMs(attempt, INDEXER_RETRY_BASE_DELAY_MS);
+      console.log(`DreamDEX indexer read failed (attempt ${attempt}/${attempts}); retrying in ${(delayMs / 1000).toFixed(0)}s...`);
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
@@ -554,7 +587,7 @@ type PriceObservation = { price: number; observedMs: number; sources: string[] }
 async function main() {
   if (process.argv.includes("--render-only")) {
     const snapshot = JSON.parse(await readFile(join(root, "data", "latest-report.json"), "utf-8"));
-    if (snapshot.version !== "0.0.0.10" || !Array.isArray(snapshot.rows) || typeof snapshot.generatedAt !== "string") throw new Error("Invalid v10 snapshot");
+    if (snapshot.version !== "0.1.0" || !Array.isArray(snapshot.rows) || typeof snapshot.generatedAt !== "string") throw new Error("Invalid report snapshot (expected version 0.1.0)");
     await writeReport(snapshot.rows, await readHistory(root), snapshot.generatedAt);
     console.log("Rendered saved snapshot without agent calls or history append.");
     return;
@@ -577,6 +610,7 @@ async function main() {
     console.log(`${markets.length} market(s). Price observations refresh after 60s; invalid LLM answers get at most one retry.`);
     const openingPrices = markets.length ? await exchange.client.getOpeningPrices(markets.map(m => m.marketId)) : {};
     const prices = new Map<string, PriceObservation>();
+    const realizedVols = new Map<string, number | null>();
     for (const m of markets) {
       const row: ReportRow = { symbol: m.symbol, marketId: m.marketId, question: m.question, asset: m.asset,
         oracleQuestionId: m.oracleQuestionId,
@@ -616,6 +650,9 @@ async function main() {
         row.currentPrice = observation.price;
         row.priceObservedAt = new Date(observation.observedMs).toISOString();
         row.priceSources = observation.sources;
+        row.priceSourceQuality = MULTI_SOURCE_PRICE
+          ? priceSourceQuality(observation.sources.length, PRICE_SOURCES[m.asset]?.length ?? 1)
+          : "single-source-fallback";
         // Refresh the venue quote and trading status immediately before preparing the estimate.
         const onchain = await exchange.client.getMarketOnchain(m.marketId as Hex);
         if (onchain.status !== STATUS_TRADING) { row.issue = "Market is no longer trading."; continue; }
@@ -642,7 +679,19 @@ async function main() {
         row.minutesLeft = remainingMinutes(m.expiry, observedMs);
         if (row.minutesLeft <= 1) { row.issue = "Too close to expiry after fetching inputs."; continue; }
         row.movePct = ((row.currentPrice - row.openingPrice) / row.openingPrice) * 100;
-        row.naiveEst = naiveProbability(row.movePct, row.minutesLeft, m.asset);
+        let realizedVol: number | null = null;
+        if (USE_REALIZED_VOLATILITY) {
+          if (!realizedVols.has(m.asset)) {
+            const vol = await fetchRealizedVolatility(m.asset);
+            realizedVols.set(m.asset, vol);
+            console.log(vol !== null
+              ? `Realized volatility for ${m.asset}: ${(vol * 100).toFixed(1)}% annualized (7d, Binance klines) — replacing the fixed assumption.`
+              : `Realized volatility for ${m.asset} unavailable; using the fixed disclosed assumption.`);
+          }
+          realizedVol = realizedVols.get(m.asset) ?? null;
+        }
+        row.realizedVolAnnual = realizedVol;
+        row.naiveEst = naiveProbability(row.movePct, row.minutesLeft, m.asset, realizedVol ?? undefined);
         const { prompt, system } = buildPrompt({ asset: m.asset, question: m.question,
           openingPrice: row.openingPrice, currentPrice: row.currentPrice, movePct: row.movePct, minutesLeft: row.minutesLeft });
         console.log(`Requesting LLM estimate for ${m.symbol} (${row.minutesLeft.toFixed(1)} minutes left)...`);
@@ -688,7 +737,7 @@ async function main() {
   }
   await appendSignalHistory(root, rows);
   await mkdir(join(root, "data"), { recursive: true });
-  await writeFile(join(root, "data", "latest-report.json"), JSON.stringify({ version: "0.0.0.10", generatedAt, rows }, null, 2), "utf-8");
+  await writeFile(join(root, "data", "latest-report.json"), JSON.stringify({ version: "0.1.0", generatedAt, rows }, null, 2), "utf-8");
   const path = await writeReport(rows, await readHistory(root), generatedAt);
   console.log(`EdgeScope report: ${path}`);
   if (rows.length && !rows.some(r => r.llmStatus === "ok")) {

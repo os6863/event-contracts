@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf } from "./analysis.js";
+import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
 import type { ReportRow, HistoryEntry } from "./types.js";
@@ -39,17 +39,29 @@ function baselineAgreement(naiveEst: number, llmEst: number, dreamdexUp: number)
   return "none";
 }
 
-test("pre-refactor baseline and agreement remain identical across a grid of inputs", () => {
+test("pre-refactor baseline and agreement remain identical across a grid of inputs, except the deliberately fixed conflicted-signal case", () => {
   for (const asset of ["BTC", "ETH", "OTHER"]) for (const minutes of [0, 1, 15, 60, 240, 1440]) for (const move of [-2, -.5, 0, .5, 2]) {
     assert.equal(naiveProbability(move, minutes, asset), baselineNaiveProbability(move, minutes, asset));
   }
-  for (const naive of [.1,.3,.5,.7,.9]) for (const llm of [.1,.3,.5,.7,.9]) for (const market of [.1,.3,.5,.7,.9]) assert.equal(computeAgreement(naive,llm,market), baselineAgreement(naive,llm,market));
+  for (const naive of [.1,.3,.5,.7,.9]) for (const llm of [.1,.3,.5,.7,.9]) for (const market of [.1,.3,.5,.7,.9]) {
+    const base = baselineAgreement(naive, llm, market);
+    const actual = computeAgreement(naive, llm, market);
+    const naiveFlagged = Math.abs(naive - market) >= 0.15;
+    const llmFlagged = Math.abs(llm - market) >= 0.15;
+    const bothFlaggedOpposite = naiveFlagged && llmFlagged && Math.sign(naive - market) !== Math.sign(llm - market);
+    // The one intentional divergence from the frozen baseline: both estimators
+    // flagged but disagreeing on direction is now "conflicted", not "weak" —
+    // everywhere else, behavior must still match the baseline exactly.
+    if (bothFlaggedOpposite) assert.equal(actual, "conflicted");
+    else assert.equal(actual, base);
+  }
 });
 test("CDF reference and time direction", () => {
   assert.ok(Math.abs(normalCDF(1.96) - .9750021) < 1e-6);
   assert.ok(naiveProbability(.5,15,"BTC") > naiveProbability(.5,1440,"BTC"));
   assert.ok(Math.abs(naiveProbability(0,15,"BTC") - .5) < 1e-8);
-  assert.equal(computeAgreement(.8,.2,.5), "weak");
+  assert.equal(computeAgreement(.8,.2,.5), "conflicted"); // both flagged, opposite directions
+  assert.equal(computeAgreement(.8,.5,.5), "weak"); // only one flagged
 });
 test("malformed final response can never turn into probability zero", () => {
   for (const final of [undefined, null, "", "0.65", "6500 words", "<truncated>", "6500\n0"]) assert.throws(() => validateLlmResult(0n,final));
@@ -96,6 +108,7 @@ test("simulated edge only counts resolved, signaled trades and picks the diverge
   assert.equal(summary3.strong, null);
   const excluded = [
     {...entry, agreement: "none" as const, resolved: true as const, actualOutcome: "YES" as const},
+    {...entry, agreement: "conflicted" as const, resolved: true as const, actualOutcome: "YES" as const},
     {...entry, resolved: undefined, actualOutcome: undefined},
     {...entry, resolved: "voided" as const},
     {...entry, invalidated: true, resolved: true as const, actualOutcome: "YES" as const},
@@ -203,14 +216,61 @@ test("medianOf: odd count returns the middle value, even count averages the two 
   assert.equal(medianOf([100000.5, 100000.7, 900000]), 100000.7); // one wildly-off source doesn't move a 3-source median
   assert.throws(() => medianOf([]));
 });
-test("multi-source price row renders the source count and names in the verification snapshot", () => {
-  const html = renderReport([{ ...row, priceSources: ["CoinGecko", "Binance"] }], [entry], row.observedAt!);
-  assert.ok(html.includes("median of 2"));
-  assert.ok(html.includes("CoinGecko, Binance"));
-  const singleSource = renderReport([{ ...row, priceSources: ["CoinGecko"] }], [entry], row.observedAt!);
-  assert.ok(singleSource.includes("median of 1"));
+test("price source quality is labeled honestly in the verification snapshot — a single surviving source is never shown as if it were a real median", () => {
+  const verifiedMulti = renderReport([{ ...row, priceSources: ["CoinGecko", "Binance", "Coinbase"], priceSourceQuality: "verified-multi-source" as const }], [entry], row.observedAt!);
+  assert.ok(verifiedMulti.includes("verified multi-source"));
+  assert.ok(verifiedMulti.includes("CoinGecko, Binance, Coinbase"));
+  const degraded = renderReport([{ ...row, priceSources: ["CoinGecko", "Binance"], priceSourceQuality: "degraded-multi-source" as const }], [entry], row.observedAt!);
+  assert.ok(degraded.includes("degraded multi-source"));
+  const singleSource = renderReport([{ ...row, priceSources: ["CoinGecko"], priceSourceQuality: "single-source-fallback" as const }], [entry], row.observedAt!);
+  assert.ok(singleSource.includes("single-source fallback"));
+  assert.ok(!singleSource.includes("verified multi-source") && !singleSource.includes("degraded multi-source"));
   const noSourceInfo = renderReport([{ ...row, priceSources: undefined }], [entry], row.observedAt!);
-  assert.ok(!noSourceInfo.includes("median of"));
+  assert.ok(!noSourceInfo.includes("multi-source") && !noSourceInfo.includes("single-source fallback"));
+});
+test("report.schema.json's required reportRow fields are actually present on a real row, and stays in sync with the JSON snapshot shape", async () => {
+  const schemaText = await readFile(new URL("../schema/report.schema.json", import.meta.url), "utf-8");
+  const schema = JSON.parse(schemaText);
+  const requiredRowFields: string[] = schema.definitions.reportRow.required;
+  for (const field of requiredRowFields) assert.ok(field in row, `schema requires "${field}" but the sample ReportRow doesn't have it`);
+  assert.deepEqual(new Set(schema.required), new Set(["version", "generatedAt", "rows"]));
+  assert.ok(Array.isArray(schema.definitions.signalAgreement.enum));
+  for (const v of ["strong", "conflicted", "weak", "none"]) assert.ok(schema.definitions.signalAgreement.enum.includes(v), `schema enum missing SignalAgreement value "${v}"`);
+});
+test("naive baseline shows the realized-volatility figure when available, and says plainly when it fell back to the fixed assumption", () => {
+  const withVol = renderReport([{ ...row, realizedVolAnnual: 0.62 }], [entry], row.observedAt!);
+  assert.ok(withVol.includes("62% realized vol"));
+  const fallback = renderReport([{ ...row, realizedVolAnnual: null }], [entry], row.observedAt!);
+  assert.ok(fallback.includes("fixed volatility assumption"));
+  const unset = renderReport([{ ...row, realizedVolAnnual: undefined }], [entry], row.observedAt!);
+  assert.ok(!unset.includes("realized vol") && !unset.includes("fixed volatility assumption"));
+});
+test("computeRealizedVolatility: too few points or non-positive prices return null instead of throwing or poisoning the calc", () => {
+  assert.equal(computeRealizedVolatility([], 60), null);
+  assert.equal(computeRealizedVolatility([100], 60), null);
+  assert.equal(computeRealizedVolatility([100, 101], 60), null); // only 1 return — need at least 2 for a variance
+  assert.equal(computeRealizedVolatility([100, 0, 102], 60), null); // non-positive price poisons a log return
+  assert.equal(computeRealizedVolatility([100, 101, 99], 0), null); // invalid period
+});
+test("computeRealizedVolatility: constant prices are zero volatility; more dispersed returns score higher", () => {
+  const flat = computeRealizedVolatility([100, 100, 100, 100], 60);
+  assert.ok(flat !== null && flat >= 0 && flat < 1e-9);
+  const calm = computeRealizedVolatility([100, 100.2, 99.9, 100.3, 99.8], 60);
+  const volatile = computeRealizedVolatility([100, 110, 92, 115, 88], 60);
+  assert.ok(calm !== null && volatile !== null && volatile > calm);
+});
+test("indexerBackoffDelayMs: doubles each attempt from the base", () => {
+  assert.equal(indexerBackoffDelayMs(1, 3000), 3000);
+  assert.equal(indexerBackoffDelayMs(2, 3000), 6000);
+  assert.equal(indexerBackoffDelayMs(3, 3000), 12000);
+  assert.equal(indexerBackoffDelayMs(4, 3000), 24000);
+});
+test("priceSourceQuality: labels reflect how many sources actually succeeded, not just whether the market got a price", () => {
+  assert.equal(priceSourceQuality(3, 3), "verified-multi-source");
+  assert.equal(priceSourceQuality(2, 3), "degraded-multi-source");
+  assert.equal(priceSourceQuality(2, 2), "verified-multi-source");
+  assert.equal(priceSourceQuality(1, 3), "single-source-fallback");
+  assert.equal(priceSourceQuality(1, 1), "single-source-fallback"); // a single configured source is still just one source
 });
 test("empty report, missing reasoning and invalid numbers render safely", async () => {
   const html=renderReport([],[],row.observedAt!);assert.ok(html.includes("No active signal data"));assert.ok(html.includes("No verified settlement"));

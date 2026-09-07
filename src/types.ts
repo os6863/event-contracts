@@ -1,5 +1,6 @@
-export type SignalAgreement = "strong" | "weak" | "none";
+export type SignalAgreement = "strong" | "conflicted" | "weak" | "none";
 export type LiquidityState = "ok" | "one-sided" | "no-book" | "wide-spread";
+export type PriceSourceQuality = "verified-multi-source" | "degraded-multi-source" | "single-source-fallback";
 
 export type ReportRow = {
   symbol: string;
@@ -11,6 +12,10 @@ export type ReportRow = {
   currentPrice: number | null;
   /** Names of the independent price sources whose median produced `currentPrice` (e.g. ["CoinGecko","Binance"]). */
   priceSources?: string[];
+  /** How many sources actually succeeded vs. how many were configured — see priceSourceQuality(). */
+  priceSourceQuality?: PriceSourceQuality;
+  /** Annualized realized volatility used for the naive baseline, when a measured value was available (null/undefined falls back to the disclosed static assumption). */
+  realizedVolAnnual?: number | null;
   movePct: number | null;
   dreamdexUp: number | null;
   liquidityState?: LiquidityState;

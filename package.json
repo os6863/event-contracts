@@ -1,6 +1,6 @@
 {
   "name": "event-contracts-mispricing-detector",
-  "version": "0.0.0.10",
+  "version": "0.1.0",
   "private": true,
   "description": "EdgeScope: a DreamDEX Event Contracts mispricing detector using verifiably executed Somnia Agent estimates.",
   "type": "module",
@@ -10,6 +10,7 @@
     "check-outcomes": "tsx src/check-outcomes.ts",
     "render-report": "tsx src/mispricing-report.ts --render-only",
     "test": "tsx --test src/tests.test.ts",
+    "test:integration": "tsx src/integration-smoke.ts",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm test"
   },

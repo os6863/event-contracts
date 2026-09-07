@@ -28,7 +28,7 @@ export async function appendSignalHistory(root: string, rows: ReportRow[]) {
     if (r.llmStatus !== "ok" || !validMarketId(r.marketId) || !r.observedAt ||
       values.some(v => typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1) ||
       typeof r.divergence !== "number" || !Number.isFinite(r.divergence)) continue;
-    added.push({ timestamp: r.observedAt, version: "0.0.0.10", symbol: r.symbol, marketId: r.marketId,
+    added.push({ timestamp: r.observedAt, version: "0.1.0", symbol: r.symbol, marketId: r.marketId,
       asset: r.asset, dreamdexUp: r.dreamdexUp!, naiveEst: r.naiveEst!, llmEst: r.llmEst!,
       ensembleEst: r.ensembleEst!, divergence: r.divergence, agreement: r.agreement,
       requestId: r.requestId, receiptUrl: r.receiptUrl });

@@ -36,11 +36,11 @@ async function main() {
   // No fresh agent calls needed to update the Track Record in both HTML outputs.
   try {
     const snapshot = JSON.parse(await readFile(join(root, "data", "latest-report.json"), "utf-8"));
-    if (snapshot.version !== "0.0.0.10" || !Array.isArray(snapshot.rows)) throw new Error("Invalid v10 snapshot");
+    if (snapshot.version !== "0.1.0" || !Array.isArray(snapshot.rows)) throw new Error("Invalid report snapshot (expected version 0.1.0)");
     await writeReport(snapshot.rows, history, snapshot.generatedAt);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    console.log("No v10 snapshot yet; run mispricing-report-v5 to generate the UI.");
+    console.log("No v10 snapshot yet; run `npm run report` to generate the UI.");
   }
   console.log(`${history.filter(h => h.resolved === true).length} resolved prediction records. ${failures} lookup failure(s).`);
   if (failures) process.exitCode = 1;

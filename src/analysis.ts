@@ -1,4 +1,4 @@
-import type { SignalAgreement, HistoryEntry } from "./types.js";
+import type { SignalAgreement, HistoryEntry, PriceSourceQuality } from "./types.js";
 export const MISPRICING_ALERT_THRESHOLD = 0.15;
 // Above this spread, a two-sided quote is treated as too thin to trust as
 // a probability, not just an academic quibble: an empty book can print a
@@ -25,8 +25,17 @@ export function normalCDF(z: number): number {
   return 0.5 * (1 + sign * y);
 }
 
-export function naiveProbability(movePct: number, minutesLeft: number, asset: string): number {
-  const sigmaAnnual = ASSET_ANNUAL_VOLATILITY[asset] ?? DEFAULT_ANNUAL_VOLATILITY;
+/**
+ * `realizedVolAnnual`, when a finite positive number, overrides the fixed
+ * disclosed BTC/ETH assumption below with a measured value (see
+ * `computeRealizedVolatility`). Omitting it — every existing call site
+ * before this change — reproduces the original fixed-assumption behavior
+ * exactly; this is additive, not a replacement of the disclosed baseline.
+ */
+export function naiveProbability(movePct: number, minutesLeft: number, asset: string, realizedVolAnnual?: number): number {
+  const sigmaAnnual = realizedVolAnnual !== undefined && Number.isFinite(realizedVolAnnual) && realizedVolAnnual > 0
+    ? realizedVolAnnual
+    : ASSET_ANNUAL_VOLATILITY[asset] ?? DEFAULT_ANNUAL_VOLATILITY;
   const tYears = Math.max(minutesLeft, 1) / MINUTES_PER_YEAR; // floor at 1 minute — avoid dividing by ~0
   const sigmaOverWindow = sigmaAnnual * Math.sqrt(tYears);
   const z = movePct / 100 / sigmaOverWindow;
@@ -34,6 +43,40 @@ export function naiveProbability(movePct: number, minutesLeft: number, asset: st
   return Math.min(NAIVE_PROB_CEILING, Math.max(NAIVE_PROB_FLOOR, raw));
 }
 
+/**
+ * Annualized realized volatility from a series of prices (oldest first,
+ * evenly spaced `periodMinutes` apart), via the sample standard deviation
+ * of log returns scaled to a year. Returns `null` on fewer than 3 prices
+ * (need at least 2 returns for a variance) or any non-positive price,
+ * rather than throwing or returning a poisoned number — the caller is
+ * expected to fall back to the disclosed static assumption on `null`.
+ */
+export function computeRealizedVolatility(closes: number[], periodMinutes: number): number | null {
+  if (closes.length < 3 || !(periodMinutes > 0)) return null;
+  const logReturns: number[] = [];
+  for (let i = 1; i < closes.length; i++) {
+    const prev = closes[i - 1];
+    const cur = closes[i];
+    if (!(prev > 0) || !(cur > 0)) return null;
+    logReturns.push(Math.log(cur / prev));
+  }
+  const mean = logReturns.reduce((s, v) => s + v, 0) / logReturns.length;
+  const variance = logReturns.reduce((s, v) => s + (v - mean) ** 2, 0) / (logReturns.length - 1);
+  const periodsPerYear = MINUTES_PER_YEAR / periodMinutes;
+  const annualized = Math.sqrt(variance * periodsPerYear);
+  return Number.isFinite(annualized) ? annualized : null;
+}
+
+/**
+ * "Both estimators clear the threshold" used to collapse two genuinely
+ * different situations into one "strong" case, and "only one clears it"
+ * used to cover both "the other is silent" and "the other actively
+ * disagrees" under one "weak" label. Now: both-flagged-same-direction is
+ * `strong`; both-flagged-OPPOSITE-direction is `conflicted` — the models
+ * disagree with each other, not just with the market, which is a materially
+ * different (and less actionable) situation than one model being silent.
+ * `weak` is now exactly "one estimator flagged, the other didn't".
+ */
 export function computeAgreement(
   naiveEst: number,
   llmEst: number,
@@ -43,8 +86,7 @@ export function computeAgreement(
   const llmDiv = llmEst - dreamdexUp;
   const naiveFlagged = Math.abs(naiveDiv) >= MISPRICING_ALERT_THRESHOLD;
   const llmFlagged = Math.abs(llmDiv) >= MISPRICING_ALERT_THRESHOLD;
-  const sameDirection = Math.sign(naiveDiv) === Math.sign(llmDiv);
-  if (naiveFlagged && llmFlagged && sameDirection) return "strong";
+  if (naiveFlagged && llmFlagged) return Math.sign(naiveDiv) === Math.sign(llmDiv) ? "strong" : "conflicted";
   if (naiveFlagged || llmFlagged) return "weak";
   return "none";
 }
@@ -74,6 +116,11 @@ export function validateLlmResult(raw: bigint, finalAnswer: unknown): number {
   if (BigInt(finalAnswer.trim()) !== raw) throw new Error("LLM final answer disagrees with ABI result");
   return Number(raw) / 10000;
 }
+/** Exponential backoff delay (ms) before retry attempt `attempt` (1-indexed): base, base*2, base*4, ... */
+export function indexerBackoffDelayMs(attempt: number, baseMs: number): number {
+  return baseMs * 2 ** (attempt - 1);
+}
+
 /** Median of one or more values. Even-length inputs average the two middle values. */
 export function medianOf(values: number[]): number {
   if (!values.length) throw new Error("medianOf: empty array");
@@ -114,6 +161,24 @@ export function computeUniqueMarketBrier(history: HistoryEntry[], key: "dreamdex
   };
 }
 
+/**
+ * A "median" of one reading is not a multi-source median — it's a single
+ * source that happened to survive. Label it as what it actually is so the
+ * report never implies more independent confirmation than it has.
+ * `configuredCount` is how many sources were attempted (from `PRICE_SOURCES`),
+ * `successCount` is how many actually returned a usable price.
+ */
+export function priceSourceQuality(successCount: number, configuredCount: number): PriceSourceQuality {
+  if (successCount >= configuredCount && successCount >= 2) return "verified-multi-source";
+  if (successCount >= 2) return "degraded-multi-source";
+  return "single-source-fallback";
+}
+export const PRICE_SOURCE_QUALITY_LABEL: Record<PriceSourceQuality, string> = {
+  "verified-multi-source": "verified multi-source",
+  "degraded-multi-source": "degraded multi-source",
+  "single-source-fallback": "single-source fallback",
+};
+
 export type SimulatedEdgeBucket = {
   n: number;
   wins: number;
@@ -137,7 +202,7 @@ export function computeSimulatedEdge(history: HistoryEntry[]): SimulatedEdgeSumm
   type Trade = { won: boolean; payoff: number; returnPct: number };
   const trades: { strong: Trade[]; weak: Trade[] } = { strong: [], weak: [] };
   for (const h of history) {
-    if (h.invalidated || h.resolved !== true || h.agreement === "none") continue;
+    if (h.invalidated || h.resolved !== true || h.agreement === "none" || h.agreement === "conflicted") continue;
     if (typeof h.actualOutcome !== "string" || (h.actualOutcome !== "YES" && h.actualOutcome !== "NO")) continue;
     if (!Number.isFinite(h.dreamdexUp) || h.dreamdexUp < 0 || h.dreamdexUp > 1) continue;
     if (!Number.isFinite(h.divergence) || h.divergence === 0) continue;

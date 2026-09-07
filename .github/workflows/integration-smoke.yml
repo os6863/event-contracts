@@ -1,0 +1,29 @@
+name: Integration smoke test (read-only)
+
+# Deliberately separate from ci.yml: this hits the real Somnia testnet
+# (indexer, RPC, on-chain reads) and can fail on a transient network issue
+# that has nothing to do with the code in a given PR — see CHANGELOG.md for
+# a live RPC hiccup that happened during ordinary development. Runs on a
+# schedule and on manual dispatch, never blocking a pull request's required
+# checks. No PRIVATE_KEY needed: every check here is read-only.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *" # every 6 hours, offset from the hour to avoid GitHub's on-the-hour scheduling crunch
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    continue-on-error: true # a transient testnet issue should be visible, not treated as a broken build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration

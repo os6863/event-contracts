@@ -1,0 +1,57 @@
+name: Refresh report (scheduled)
+
+# Turns the "you have to run npm run report manually" limitation into an
+# actual auto-refresh: on a schedule, this checks settlement outcomes for
+# anything that resolved since the last run, generates a fresh snapshot and
+# HTML report, and commits+pushes them if anything changed. Requires a
+# PRIVATE_KEY repository secret (Settings -> Secrets and variables ->
+# Actions -> New repository secret) holding a funded Somnia Shannon testnet
+# wallet's private key — a disposable key generated via
+# `npm run generate-wallet` is fine; see SECURITY.md. Without that secret
+# set, this workflow runs and fails cleanly at the report step rather than
+# doing anything destructive.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-report
+  cancel-in-progress: false # never cancel a run mid-write; let it finish or fail cleanly
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Check settlement outcomes for previously-logged markets
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: npm run check-outcomes
+
+      - name: Generate a fresh report snapshot
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: npm run report
+
+      - name: Commit and push if the snapshot changed
+        run: |
+          git config user.name "edgescope-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/latest-report.json data/signal-history.json docs/index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore(bot): scheduled report refresh [skip ci]"
+            git push
+          fi

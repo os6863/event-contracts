@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/os6863/event-contracts/schema/report.schema.json",
+  "title": "EdgeScope report snapshot",
+  "description": "Shape of data/latest-report.json, the machine-readable output of `npm run report`. This is a point-in-time snapshot, not a live feed — check `generatedAt` before trusting a consumer's cached copy.",
+  "type": "object",
+  "required": ["version", "generatedAt", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "string", "description": "Snapshot schema version. Consumers should reject snapshots with an unrecognized version rather than guess at field meaning." },
+    "generatedAt": { "type": "string", "format": "date-time", "description": "ISO-8601 timestamp of when this snapshot was generated. This is a snapshot, not a live value." },
+    "rows": { "type": "array", "items": { "$ref": "#/definitions/reportRow" } }
+  },
+  "definitions": {
+    "signalAgreement": { "type": "string", "enum": ["strong", "conflicted", "weak", "none"] },
+    "liquidityState": { "type": "string", "enum": ["ok", "one-sided", "no-book", "wide-spread"] },
+    "priceSourceQuality": { "type": "string", "enum": ["verified-multi-source", "degraded-multi-source", "single-source-fallback"] },
+    "llmStatus": { "type": "string", "enum": ["ok", "failed", "skipped", "expired"] },
+    "reportRow": {
+      "type": "object",
+      "required": ["symbol", "marketId", "question", "asset", "openingPrice", "currentPrice", "movePct", "dreamdexUp", "naiveEst", "llmEst", "ensembleEst", "llmStatus", "divergence", "flagged", "agreement", "thinking", "reasoningTruncated"],
+      "additionalProperties": true,
+      "properties": {
+        "symbol": { "type": "string", "description": "DreamDEX market symbol." },
+        "marketId": { "type": "string", "description": "On-chain market id, as a hex string." },
+        "question": { "type": "string" },
+        "asset": { "type": "string", "description": "Underlying asset, e.g. \"BTC\" or \"ETH\"." },
+        "oracleQuestionId": { "type": ["string", "null"] },
+        "openingPrice": { "type": ["number", "null"] },
+        "currentPrice": { "type": ["number", "null"], "description": "Median independent price used for this observation. See priceSources/priceSourceQuality for how many sources actually backed it." },
+        "priceSources": { "type": "array", "items": { "type": "string" }, "description": "Names of the price sources that actually returned a usable price for this observation." },
+        "priceSourceQuality": { "$ref": "#/definitions/priceSourceQuality" },
+        "realizedVolAnnual": { "type": ["number", "null"], "description": "Annualized realized volatility used for the naive baseline. null means the fixed disclosed assumption was used instead (realized-vol fetch unavailable)." },
+        "movePct": { "type": ["number", "null"] },
+        "dreamdexUp": { "type": ["number", "null"], "description": "DreamDEX's own implied probability from the order book. null when liquidity was insufficient to trust a probability." },
+        "liquidityState": { "$ref": "#/definitions/liquidityState" },
+        "spread": { "type": ["number", "null"] },
+        "bestBid": { "type": ["number", "null"] },
+        "bestAsk": { "type": ["number", "null"] },
+        "naiveEst": { "type": ["number", "null"], "description": "Baseline probability from the analytic model (time-scaled normal CDF over the observed move)." },
+        "llmEst": { "type": ["number", "null"], "description": "Probability from the Somnia LLM Inference Agent." },
+        "ensembleEst": { "type": ["number", "null"], "description": "Average of naiveEst and llmEst. Not claimed to be independent of naiveEst — see docs/METHODOLOGY.md." },
+        "llmStatus": { "$ref": "#/definitions/llmStatus" },
+        "divergence": { "type": ["number", "null"], "description": "ensembleEst - dreamdexUp." },
+        "flagged": { "type": "boolean" },
+        "agreement": { "$ref": "#/definitions/signalAgreement" },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "priceObservedAt": { "type": "string", "format": "date-time" },
+        "minutesLeft": { "type": "number" },
+        "issue": { "type": "string", "description": "Present when this market was skipped or invalidated; human-readable reason." },
+        "receiptUrl": { "type": "string", "format": "uri" },
+        "requestId": { "type": "string" },
+        "retried": { "type": "boolean" },
+        "thinking": { "type": ["string", "null"], "description": "LLM Agent reasoning text, or null if unavailable." },
+        "reasoningTruncated": { "type": "boolean" }
+      }
+    }
+  }
+}
