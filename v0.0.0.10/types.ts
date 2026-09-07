@@ -1,4 +1,5 @@
 export type SignalAgreement = "strong" | "weak" | "none";
+export type LiquidityState = "ok" | "one-sided" | "no-book" | "wide-spread";
 
 export type ReportRow = {
   symbol: string;
@@ -10,6 +11,10 @@ export type ReportRow = {
   currentPrice: number | null;
   movePct: number | null;
   dreamdexUp: number | null;
+  liquidityState?: LiquidityState;
+  spread?: number | null;
+  bestBid?: number | null;
+  bestAsk?: number | null;
   naiveEst: number | null;
   llmEst: number | null;
   ensembleEst: number | null;

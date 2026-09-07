@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
 import vm from "node:vm";
-import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge } from "./analysis.js";
+import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
 import type { ReportRow, HistoryEntry } from "./types.js";
@@ -121,6 +121,56 @@ test("oracle explorer link renders only for a valid decimal question id", () => 
     const html = renderReport([{...row, oracleQuestionId: bad as any}],[],row.observedAt!);
     assert.ok(!html.includes("prd.oracle.somnia.host"));
   }
+});
+test("liquidity classification: tight two-sided ok, wide-spread and one-sided both rejected as a probability source", () => {
+  const tight = classifyLiquidity(.3, .35);
+  assert.equal(tight.state, "ok"); assert.ok(Math.abs(tight.spread! - .05) < 1e-9);
+  const under = classifyLiquidity(.46, .53); // spread .07, clearly under threshold
+  assert.equal(under.state, "ok");
+  const over = classifyLiquidity(.45, .54); // spread .09, clearly over threshold
+  assert.equal(over.state, "wide-spread");
+  const wide = classifyLiquidity(.2, .8);
+  assert.equal(wide.state, "wide-spread"); assert.ok(Math.abs(wide.spread! - .6) < 1e-9);
+  assert.deepEqual(classifyLiquidity(undefined, .95), { state: "one-sided", spread: null });
+  assert.deepEqual(classifyLiquidity(.2, undefined), { state: "one-sided", spread: null });
+  assert.deepEqual(classifyLiquidity(undefined, undefined), { state: "no-book", spread: null });
+});
+test("unique-market Brier equal-weights markets, not observations", () => {
+  const marketA = "0x" + "a".repeat(64), marketB = "0x" + "b".repeat(64);
+  // Market A logged 3 times with Brier .01/.01/.01 (mean .01); market B logged once with Brier .81.
+  // Observation-level would be skewed toward A (4 rows, 3 from A); per-market must weight A and B equally: (.01 + .81)/2 = .41.
+  const history: HistoryEntry[] = [
+    {...entry, marketId: marketA, resolved: true, dreamdexBrier: .01},
+    {...entry, marketId: marketA, resolved: true, dreamdexBrier: .01},
+    {...entry, marketId: marketA, resolved: true, dreamdexBrier: .01},
+    {...entry, marketId: marketB, resolved: true, dreamdexBrier: .81},
+  ];
+  const summary = computeUniqueMarketBrier(history, "dreamdexBrier");
+  assert.equal(summary!.n, 4); assert.equal(summary!.uniqueMarkets, 2);
+  assert.ok(Math.abs(summary!.avgPerMarket - .41) < 1e-9);
+  // Excluded: invalidated, unresolved, missing marketId, non-finite score.
+  const excluded: HistoryEntry[] = [
+    {...entry, marketId: marketA, resolved: true, invalidated: true, dreamdexBrier: .01},
+    {...entry, marketId: marketA, resolved: undefined, dreamdexBrier: .01},
+    {...entry, marketId: undefined, resolved: true, dreamdexBrier: .01},
+  ];
+  assert.equal(computeUniqueMarketBrier(excluded, "dreamdexBrier"), null);
+});
+test("insufficient liquidity renders a distinct explanation and never leaks a fabricated probability", () => {
+  const noBook = {...row, dreamdexUp: null, liquidityState: "no-book" as const, spread: null, bestBid: null, bestAsk: null};
+  const html1 = renderReport([noBook], [], row.observedAt!);
+  assert.ok(html1.includes("Insufficient market liquidity"));
+  assert.ok(html1.includes("no bid or ask is posted"));
+  assert.ok(html1.includes('data-signal="none"'));
+  assert.ok(!html1.includes('data-signal="strong"') && !html1.includes('data-signal="weak"'));
+  const oneSided = {...row, dreamdexUp: null, liquidityState: "one-sided" as const, spread: null, bestBid: null, bestAsk: .95};
+  const html2 = renderReport([oneSided], [], row.observedAt!);
+  assert.ok(html2.includes("only one side of the book is posted"));
+  assert.ok(html2.includes("ask 95.00%"));
+  assert.ok(!html2.includes("95.00% (two-sided"));
+  const wide = {...row, dreamdexUp: null, liquidityState: "wide-spread" as const, spread: .6, bestBid: .2, bestAsk: .8};
+  const html3 = renderReport([wide], [], row.observedAt!);
+  assert.ok(html3.includes("60.0 pts"));
 });
 test("simulated edge section renders resolved trades and an explicit empty state otherwise", () => {
   const resolvedEntry = {...entry, resolved: true as const, actualOutcome: "YES" as const};

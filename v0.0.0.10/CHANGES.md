@@ -58,3 +58,27 @@ Every resolved, signaled history entry (`agreement !== "none"`) already carries 
 - Caught in review before shipping: the empty-bucket copy read "No resolved weak signals signals yet." (title already contained "signals", the template appended it again) — fixed to a class-agnostic message.
 - `npm run typecheck`: passed. `npm test`: 14/14 passed (12 prior + 2 new).
 - Sanity-checked against this repo's own real `data/signal-history.json` (not just synthetic fixtures): ran cleanly, returned `{n: 2, wins: 0, avgReturnPct: -100%}` for strong signals — an honestly bad small-sample result, which is exactly the kind of number this panel exists to surface without softening.
+
+## Post-submission addition: liquidity gate, unique-market scoring, wording precision
+
+Prompted by a third-party technical review of the submission. Verified every specific code-level claim against the actual source before acting on it (not taken on faith) — see the review conversation for what was checked and what was declined with reasons (a full "Edge Confidence Engine" composite score and multi-source oracle pricing were judged too large/risky for the remaining time, not rejected as bad ideas).
+
+**Liquidity gate (confirmed real, not a hypothetical concern):** the order-book code that produces `dreamdexUp` — the number every signal is compared against — previously fell back to a single-sided quote (`ask ?? bid`) when only one side of the book was posted, and had no spread check at all. A one-sided `ask = 0.95` with no bid would have been read as "DreamDEX prices this at 95%," which is a real number but not a real market view.
+
+- New `classifyLiquidity()` in `analysis.ts`: `ok` (two-sided, spread ≤ `MAX_SPREAD_FOR_SIGNAL` = 0.08), `wide-spread`, `one-sided`, or `no-book`.
+- Wired into the real signal-generation path in `mispricing-report.ts` (not the earlier, display-only pre-scan table). Below `ok`, `dreamdexUp` stays `null` — never smuggled in as a number — and the paid LLM Agent call is skipped entirely, since there's nothing reliable to compare it against. This also saves testnet gas on illiquid markets.
+- Raw bid/ask/spread are still shown in the report's evidence panel for transparency, explicitly labeled as not used for classification.
+- New report explanation state distinguishing "insufficient liquidity" from "no signal found" — these were previously indistinguishable to a reader.
+
+**Unique-market Brier scoring:** the existing Track Record score averaged every logged observation equally, so a market observed 3 times counted 3x as much as one observed once. New `computeUniqueMarketBrier()` averages within a market first, then across markets, and is shown side-by-side with the original per-observation number in the report.
+
+**Wording precision (README only, no code change):** "independent, on-chain probability estimate" softened to reflect that only the Agent execution/receipt is on-chain — the CoinGecko price input itself is not. Added explicit, upfront disclosure that this project's independent price reference is not claimed to equal DreamDEX's own multi-source settlement oracle (by design — an independent check that matched the thing it's checking wouldn't be independent), and that the naive/LLM estimates share the same underlying price-move input rather than being fully independent evidence of each other.
+
+**Static-snapshot reframe (README only):** added a lead-in sentence positioning the snapshot report as an immutable, reproducible artifact, without removing the existing honest explanation of why it isn't live-updating.
+
+**Declined, with reasons, for this submission:**
+- Multi-source price (Binance/Coinbase/Kraken median) — real improvement, but conflicts with the project's stated zero-cost/no-API-key design goal and adds three new network dependencies this close to the deadline.
+- Dynamic realized volatility from candles — legitimate weakness (already disclosed in README), but real new code with real new bug surface, better suited to a post-hackathon v0.0.0.11.
+- A composite "Confidence: 87/100" scoring engine — declined specifically because it would bake in undisclosed, hand-picked weights, which is the same methodological problem (manual, uncalibrated anchors) the review itself flagged elsewhere. The liquidity gate above solves the same underlying problem with an explicit boolean state instead of an opaque score.
+
+**Testing:** two real bugs were caught and fixed during this work before being shipped — an orphaned test block from a bad edit, and a floating-point-fragile boundary assertion (`0.54 - 0.46` is not exactly `0.08` in JS float arithmetic; rewritten to test clearly-under/over values instead of the exact boundary). Final: `npm run typecheck` passed; `npm test` — **17/17** passed (14 prior + 3 new: liquidity classification, unique-market Brier, and insufficient-liquidity report rendering).

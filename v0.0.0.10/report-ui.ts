@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ReportRow, HistoryEntry, SignalAgreement } from "./types.js";
-import { validMarketId, computeSimulatedEdge, type SimulatedEdgeBucket } from "./analysis.js";
+import { validMarketId, computeSimulatedEdge, computeUniqueMarketBrier, type SimulatedEdgeBucket } from "./analysis.js";
 import { css, responsiveCss } from "./styles.js";
 
 export function escapeHtml(value: unknown): string {
@@ -38,11 +38,24 @@ const eligible = (r: ReportRow) => r.llmStatus === "ok" && prob(r.dreamdexUp) &&
 function explanation(r: ReportRow): string {
   if (r.llmStatus === "expired") return "This market expired during report generation. It is excluded from signal counts and scoring history.";
   if (r.llmStatus === "failed") return "The agent estimate was unavailable or failed response validation. No ensemble signal is issued.";
+  if (r.liquidityState && r.liquidityState !== "ok") {
+    const reason = r.liquidityState === "no-book" ? "no bid or ask is posted"
+      : r.liquidityState === "one-sided" ? "only one side of the book is posted"
+      : `the spread is too wide to trust (${finite(r.spread) ? `${(r.spread * 100).toFixed(1)} pts` : "n/a"})`;
+    return `Insufficient market liquidity — ${reason}, so the market's own probability can't be read reliably. No signal is issued; the paid Agent estimate was skipped rather than compared against an untrustworthy quote.`;
+  }
   if (r.llmStatus === "skipped") return "Incomplete or stale inputs prevented estimation. No signal is issued.";
   if (!eligible(r)) return "No usable DreamDEX quote is available for an independent comparison.";
   if (r.agreement === "strong") return "Both estimates differ from DreamDEX by at least 15 percentage points in the same direction. This is agreement on divergence, not proof of accuracy.";
   if (r.agreement === "weak") return "At least one estimate differs by 15 points, but the two do not both clear the threshold in the same direction.";
   return "Neither estimate differs from DreamDEX by the 15-point threshold.";
+}
+function orderBookLabel(r: ReportRow): string {
+  if (r.liquidityState === "ok") return `${formatProbability(r.dreamdexUp)} (two-sided, spread ${finite(r.spread) ? (r.spread * 100).toFixed(1) : "n/a"} pts)`;
+  if (r.liquidityState === "one-sided") return `${finite(r.bestBid) ? `bid ${formatProbability(r.bestBid)}` : finite(r.bestAsk) ? `ask ${formatProbability(r.bestAsk)}` : "n/a"} — one-sided, not used as a probability`;
+  if (r.liquidityState === "wide-spread") return `bid ${formatProbability(r.bestBid)} / ask ${formatProbability(r.bestAsk)} — spread too wide, not used as a probability`;
+  if (r.liquidityState === "no-book") return "no bid or ask posted";
+  return "n/a";
 }
 function bar(name: string, value: unknown, cls: string) {
   return `<div class="bar-row"><span>${name}</span><div class="bar-track" aria-hidden="true"><i class="${cls}" style="width:${prob(value) ? value * 100 : 0}%"></i></div><b>${formatProbability(value)}</b></div>`;
@@ -58,7 +71,7 @@ function renderCard(r: ReportRow, index: number): string {
     <div class="comparison">${bar("Market", r.dreamdexUp, "market-bar")}${bar("Ensemble", r.ensembleEst, "ensemble-bar")}</div>
     <p class="assessment">${explanation(r)}</p>
     <details class="evidence"><summary>Verification snapshot <span aria-hidden="true">＋</span></summary><div class="evidence-body"><dl class="verification-grid">
-    ${[["Opening price", usd(r.openingPrice)], ["Agent price", usd(r.currentPrice)], ["Price move", move(r.movePct)], ["Naive baseline", formatProbability(r.naiveEst)], ["LLM estimate", formatProbability(r.llmEst)], ["Time left at observation", finite(r.minutesLeft) ? `${r.minutesLeft.toFixed(1)} min` : "n/a"]].map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
+    ${[["Opening price", usd(r.openingPrice)], ["Agent price", usd(r.currentPrice)], ["Price move", move(r.movePct)], ["Order book", escapeHtml(orderBookLabel(r))], ["Naive baseline", formatProbability(r.naiveEst)], ["LLM estimate", formatProbability(r.llmEst)], ["Time left at observation", finite(r.minutesLeft) ? `${r.minutesLeft.toFixed(1)} min` : "n/a"]].map(([k,v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>
     <p>Input snapshot: ${time(r.observedAt)}<br>Price received: ${time(r.priceObservedAt)}<br>Market expiry: ${time(r.expiresAt)}</p>
     <p class="agent-status">${r.llmStatus === "ok" ? "Successful agent receipt · final answer checked" : r.llmStatus === "expired" ? "Receipt checked · market expired" : r.llmStatus === "failed" ? "LLM estimate unavailable" : "Estimate skipped — incomplete source data"}</p>
     ${r.retried ? '<p class="notice">A malformed initial response was rejected. The displayed result comes from one retry without extended reasoning.</p>' : ""}
@@ -80,7 +93,9 @@ function renderTrackRecord(history: HistoryEntry[]) {
   const resolved = history.filter(h => !h.invalidated && h.resolved === true && prob(h.dreamdexBrier) && prob(h.ensembleBrier));
   const unique = new Set(resolved.map(h => h.marketId).filter(Boolean)).size;
   const score = (key: "dreamdexBrier" | "ensembleBrier") => (resolved.reduce((sum, h) => sum + h[key]!, 0) / resolved.length).toFixed(4);
-  return `<section id="track-record" class="track-record"><div><span class="eyebrow">ACCOUNTABILITY, AFTER SETTLEMENT</span><h2>Track record</h2><p class="section-intro">Only on-chain resolved outcomes are scored. Lower Brier is better; voided markets are excluded.</p></div>${resolved.length ? `<div class="score-grid"><div><span>DreamDEX · avg. Brier</span><strong>${score("dreamdexBrier")}</strong></div><div><span>Ensemble · avg. Brier</span><strong class="blue">${score("ensembleBrier")}</strong></div></div><p class="muted">${resolved.length} prediction records across ${unique} unique markets. Repeated observations are scored separately; model versions may differ. This small testnet sample is not a profitability claim.</p>` : '<div class="empty">No verified settlement scores yet. Results appear after logged markets settle and outcomes are checked.</div>'}</section>`;
+  const uniqueDreamdex = computeUniqueMarketBrier(history, "dreamdexBrier");
+  const uniqueEnsemble = computeUniqueMarketBrier(history, "ensembleBrier");
+  return `<section id="track-record" class="track-record"><div><span class="eyebrow">ACCOUNTABILITY, AFTER SETTLEMENT</span><h2>Track record</h2><p class="section-intro">Only on-chain resolved outcomes are scored. Lower Brier is better; voided markets are excluded.</p></div>${resolved.length ? `<div class="score-grid"><div><span>DreamDEX · per observation</span><strong>${score("dreamdexBrier")}</strong></div><div><span>Ensemble · per observation</span><strong class="blue">${score("ensembleBrier")}</strong></div><div><span>DreamDEX · per unique market</span><strong>${uniqueDreamdex ? uniqueDreamdex.avgPerMarket.toFixed(4) : "n/a"}</strong></div><div><span>Ensemble · per unique market</span><strong class="blue">${uniqueEnsemble ? uniqueEnsemble.avgPerMarket.toFixed(4) : "n/a"}</strong></div></div><p class="muted">${resolved.length} prediction records across ${unique} unique markets. "Per observation" weights every logged prediction equally; "per unique market" averages repeated observations of the same market first, so a market logged several times doesn't count several times as much. Model versions may differ across records. This small testnet sample is not a profitability claim.</p>` : '<div class="empty">No verified settlement scores yet. Results appear after logged markets settle and outcomes are checked.</div>'}</section>`;
 }
 const pct = (v: unknown) => finite(v) ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%` : "n/a";
 const units = (v: unknown) => finite(v) ? `${v >= 0 ? "+" : ""}${v.toFixed(2)}u` : "n/a";

@@ -1,5 +1,10 @@
 import type { SignalAgreement, HistoryEntry } from "./types.js";
 export const MISPRICING_ALERT_THRESHOLD = 0.15;
+// Above this spread, a two-sided quote is treated as too thin to trust as
+// a probability, not just an academic quibble: an empty book can print a
+// midpoint (e.g. bid .20 / ask .80 -> "50%") that reflects a lack of
+// quotes, not a market view. 0.08 is a starting point, not a fitted value.
+export const MAX_SPREAD_FOR_SIGNAL = 0.08;
 const ASSET_ANNUAL_VOLATILITY: Record<string, number> = { BTC: 0.55, ETH: 0.7 };
 const DEFAULT_ANNUAL_VOLATILITY = 0.6;
 const MINUTES_PER_YEAR = 60 * 24 * 365;
@@ -44,6 +49,21 @@ export function computeAgreement(
   return "none";
 }
 
+export type LiquidityState = "ok" | "one-sided" | "no-book" | "wide-spread";
+/**
+ * A midpoint is only a meaningful probability when both sides of the book
+ * are present and reasonably close together. One-sided or wide-spread
+ * quotes are real numbers but not a trustworthy market view — the caller
+ * must not treat them as `dreamdexUp` for signal classification, only
+ * (optionally) display them as the raw quote they are.
+ */
+export function classifyLiquidity(bestBid: number | undefined, bestAsk: number | undefined): { state: LiquidityState; spread: number | null } {
+  if (bestBid === undefined && bestAsk === undefined) return { state: "no-book", spread: null };
+  if (bestBid === undefined || bestAsk === undefined) return { state: "one-sided", spread: null };
+  const spread = bestAsk - bestBid;
+  return { state: spread <= MAX_SPREAD_FOR_SIGNAL ? "ok" : "wide-spread", spread };
+}
+
 
 /** A successful execution alone is insufficient: the final answer must be intact. */
 export function validateLlmResult(raw: bigint, finalAnswer: unknown): number {
@@ -59,6 +79,32 @@ export function remainingMinutes(expirySeconds: number, observedMs = Date.now())
 }
 export function validMarketId(id: unknown): id is string {
   return typeof id === "string" && /^0x[0-9a-fA-F]{64}$/.test(id);
+}
+
+export type BrierScoreSummary = { n: number; uniqueMarkets: number; avgPerMarket: number };
+/**
+ * Equal-weights each distinct market rather than each observation: first
+ * averages Brier within a market (if it was observed more than once),
+ * then averages those per-market means across markets. Without this, a
+ * market that happened to get logged five times counts five times as
+ * much as one logged once — inflating or deflating the headline score
+ * without reflecting five times the real predictive evidence.
+ */
+export function computeUniqueMarketBrier(history: HistoryEntry[], key: "dreamdexBrier" | "ensembleBrier"): BrierScoreSummary | null {
+  const resolved = history.filter(h => !h.invalidated && h.resolved === true && typeof h[key] === "number" && Number.isFinite(h[key]) && typeof h.marketId === "string" && h.marketId);
+  if (!resolved.length) return null;
+  const byMarket = new Map<string, number[]>();
+  for (const h of resolved) {
+    const list = byMarket.get(h.marketId!) ?? [];
+    list.push(h[key]!);
+    byMarket.set(h.marketId!, list);
+  }
+  const perMarketMeans = [...byMarket.values()].map(list => list.reduce((s, v) => s + v, 0) / list.length);
+  return {
+    n: resolved.length,
+    uniqueMarkets: byMarket.size,
+    avgPerMarket: perMarketMeans.reduce((s, v) => s + v, 0) / perMarketMeans.length,
+  };
 }
 
 export type SimulatedEdgeBucket = {

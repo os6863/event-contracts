@@ -1,5 +1,5 @@
 /** v0.0.0.10: receipt-checked estimates, timestamped snapshots, EdgeScope renderer. */
-import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes } from "./analysis.js";
+import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity } from "./analysis.js";
 import type { ReportRow } from "./types.js";
 import { appendSignalHistory, readHistory } from "./history.js";
 import { writeReport } from "./report-ui.js";
@@ -520,9 +520,20 @@ async function main() {
         try {
           const book = await exchange.fetchOrderBook(m.symbol, 1);
           const bid = book.bids[0]?.[0]; const ask = book.asks[0]?.[0];
-          const p = bid !== undefined && ask !== undefined ? (bid + ask) / 2 : ask ?? bid;
-          row.dreamdexUp = p !== undefined && Number.isFinite(p) && p >= 0 && p <= 1 ? p : null;
-        } catch { row.dreamdexUp = null; }
+          row.bestBid = bid ?? null; row.bestAsk = ask ?? null;
+          const { state, spread } = classifyLiquidity(bid, ask);
+          row.liquidityState = state; row.spread = spread;
+          // A one-sided or wide-spread quote is a real number but not a
+          // trustworthy market probability (an empty book can midpoint to
+          // "50%"). Leave dreamdexUp null rather than smuggle it in — this
+          // also naturally excludes the row from history/scoring, which
+          // already require dreamdexUp to be a finite [0,1] number.
+          row.dreamdexUp = state === "ok" ? (bid! + ask!) / 2 : null;
+        } catch { row.dreamdexUp = null; row.liquidityState = "no-book"; }
+        if (row.liquidityState !== "ok") {
+          row.issue = `Insufficient market liquidity (${row.liquidityState.replace("-", " ")}) — divergence not classified as mispricing.`;
+          continue; // skip the paid LLM Agent call: no reliable dreamdexUp to compare it against
+        }
         const observedMs = Date.now();
         if (observedMs - observation.observedMs > 60000) { row.issue = "Price observation became stale while reading the market."; continue; }
         row.observedAt = new Date(observedMs).toISOString();

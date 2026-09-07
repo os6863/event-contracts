@@ -4,15 +4,20 @@
 
 An analytics tool — not a trading bot — that scans live DreamDEX Event
 Contract markets (Up/Down prediction markets on BTC/ETH), compares each
-market's own implied probability against an **independent, on-chain**
-probability estimate, and surfaces markets where the two disagree by a
-meaningful margin.
+market's own implied probability against an independent probability
+estimate, and surfaces markets where the two disagree by a meaningful
+margin.
 
 The independent estimate isn't a number our own backend just claims to
-have computed. It comes from two real **Somnia Agents** — consensus-
-validated, on-chain compute jobs — chained together: one fetches a live
-price, the other (an LLM) reasons about it. Both the computation and the
-result are verifiable on-chain, not a black box.
+have computed. It's a **verifiably executed Somnia Agent estimate based
+on independently sourced market data**: two real Somnia Agents —
+consensus-validated, on-chain compute jobs — chained together, one
+fetching a live price, the other (an LLM) reasoning about it. The
+*execution and receipt* are verifiable on-chain; the underlying price
+input (CoinGecko) is not itself on-chain data, and is not claimed to
+match DreamDEX's own multi-source settlement oracle — see "What this
+project is not" for why that's a deliberate, disclosed choice rather
+than an attempt to replicate DreamDEX's settlement reference.
 
 ## Cost
 
@@ -200,19 +205,46 @@ testing.
   prices — this project trades tUSDC on testnet). A guessed mapping
   would risk sending someone to the wrong market or the wrong network,
   which this project treats as a real bug, not a missing feature.
-- Not a live-updating dashboard. The report is a snapshot from the most
-  recent run — `npm run mispricing-report-v5` (or the current latest
-  script) followed by a commit/push is what refreshes it. A true
-  auto-refreshing version would need either a scheduled job holding
-  `PRIVATE_KEY` in CI secrets, or every visitor paying their own Somnia
-  Agent calls from their own wallet — both are larger scope changes than
-  the remaining time before this hackathon's deadline could responsibly
-  absorb without introducing an untested new failure mode.
+- Not a live-updating dashboard, by design — and worth stating as a
+  positive, not just a limitation: each generated report is an
+  immutable, reproducible market-intelligence snapshot, not a live feed
+  that could show a judge something different five minutes from now.
+  The trade-off is real, though — `npm run mispricing-report-v5` (or
+  the current latest script) followed by a commit/push is what
+  refreshes it. A true auto-refreshing version would need either a
+  scheduled job holding `PRIVATE_KEY` in CI secrets, or every visitor
+  paying their own Somnia Agent calls from their own wallet — both are
+  larger scope changes than the remaining time before this hackathon's
+  deadline could responsibly absorb without introducing an untested new
+  failure mode.
 - The naive/LLM probability estimates are not calibrated financial
   models; they exist to demonstrate a verifiable on-chain AI signal,
   not to be traded on directly. `ASSET_ANNUAL_VOLATILITY` in
   v0.0.0.10's naive formula is an assumed constant, not fitted from real
-  price history.
+  price history. The two estimates are also not fully independent
+  evidence of each other: both are ultimately functions of the same
+  observed price move (the naive formula directly; the LLM prompt is
+  seeded with move-based calibration anchors) — "both estimates agree"
+  should be read as "the same underlying signal cleared a threshold
+  twice," not as two unrelated models converging.
+- `dreamdexUp` (DreamDEX's own implied probability) is not simply
+  "whatever CoinGecko says" reflected back — it's independently read
+  from DreamDEX's own order book, and as of the liquidity gate below,
+  only trusted when that book is actually two-sided and reasonably
+  tight. Separately, the *independent* price input this project
+  compares against (CoinGecko) is not claimed to equal DreamDEX's own
+  multi-source settlement oracle reference — the two can and do diverge
+  briefly, especially late in a market's window. That's the intended
+  design (an outside reference is only useful if it isn't just a copy
+  of the thing being checked), not a bug, but it does mean this
+  project's "mispricing" signal is a divergence from one independent
+  reference, not a certified divergence from DreamDEX's actual
+  settlement mechanism.
+- Below `MAX_SPREAD_FOR_SIGNAL` liquidity, no signal is issued at all
+  (see `analysis.ts::classifyLiquidity`) — a one-sided or wide-spread
+  book is a real number but not a trustworthy market probability, and
+  is never treated as one for classification, even though the raw
+  quote is still shown for transparency.
 - Not audited — this is hackathon/testnet code.
 
 ## Links
