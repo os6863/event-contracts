@@ -85,10 +85,18 @@ function renderCard(r: ReportRow, index: number): string {
     </div></details>
   </article>`;
 }
+function closerCall(h: HistoryEntry): string {
+  if (h.invalidated || h.resolved !== true || (h.actualOutcome !== "YES" && h.actualOutcome !== "NO") || !finite(h.dreamdexUp) || !finite(h.ensembleEst)) return "—";
+  const actual = h.actualOutcome === "YES" ? 1 : 0;
+  const dreamdexError = Math.abs(h.dreamdexUp - actual);
+  const ensembleError = Math.abs(h.ensembleEst - actual);
+  if (Math.abs(dreamdexError - ensembleError) < 0.005) return "Tie";
+  return dreamdexError < ensembleError ? "DreamDEX" : "EdgeScope";
+}
 function renderHistory(history: HistoryEntry[]) {
   return `<section id="history"><div class="section-heading"><div><span class="eyebrow">OBSERVATIONS OVER TIME</span><h2>Recent signal history</h2></div><span class="subtle-tag">Latest ${Math.min(history.length, 15)} of ${history.length} records</span></div>
-  <p class="section-intro">Real testnet runs, preserved over time. Signal history alone does not measure resolved-market accuracy.</p>
-  ${history.length ? `<div class="history-shell"><table><thead><tr><th>Market / observed at</th><th>DreamDEX</th><th>Ensemble</th><th>Signal</th><th>Settlement</th></tr></thead><tbody>${history.slice(-15).reverse().map(h => `<tr><td data-label="Market"><b>${escapeHtml(h.symbol)}</b><small>${time(h.timestamp)} · ${h.version ? escapeHtml(h.version) : "legacy model"}</small></td><td data-label="DreamDEX">${formatProbability(h.dreamdexUp)}</td><td data-label="Ensemble">${formatProbability(h.ensembleEst)}</td><td data-label="Signal">${h.invalidated ? `<span class="badge">Excluded</span>` : badge(h.agreement)}</td><td data-label="Settlement">${h.invalidated ? escapeHtml(h.excludedReason ?? "Invalidated legacy response") : h.resolved === "voided" ? "Voided · not scored" : h.resolved === true && (h.actualOutcome === "YES" || h.actualOutcome === "NO") ? `Resolved ${h.actualOutcome}` : !validMarketId(h.marketId) ? "Legacy · no market ID" : "Pending verification"}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty">No signal history yet. Successful observations will appear after a report run.</div>'}</section>`;
+  <p class="section-intro">Real testnet runs, preserved over time. Signal history alone does not measure resolved-market accuracy. "Closer call" shows which side's probability was nearer the settled outcome — a per-record view of the same comparison the Track Record Brier scores summarize in aggregate.</p>
+  ${history.length ? `<div class="history-shell"><table><thead><tr><th>Market / observed at</th><th>DreamDEX</th><th>Ensemble</th><th>Signal</th><th>Settlement</th><th>Closer call</th></tr></thead><tbody>${history.slice(-15).reverse().map(h => `<tr><td data-label="Market"><b>${escapeHtml(h.symbol)}</b><small>${time(h.timestamp)} · ${h.version ? escapeHtml(h.version) : "legacy model"}</small></td><td data-label="DreamDEX">${formatProbability(h.dreamdexUp)}</td><td data-label="Ensemble">${formatProbability(h.ensembleEst)}</td><td data-label="Signal">${h.invalidated ? `<span class="badge">Excluded</span>` : badge(h.agreement)}</td><td data-label="Settlement">${h.invalidated ? escapeHtml(h.excludedReason ?? "Invalidated legacy response") : h.resolved === "voided" ? "Voided · not scored" : h.resolved === true && (h.actualOutcome === "YES" || h.actualOutcome === "NO") ? `Resolved ${h.actualOutcome}` : !validMarketId(h.marketId) ? "Legacy · no market ID" : "Pending verification"}</td><td data-label="Closer call">${escapeHtml(closerCall(h))}</td></tr>`).join("")}</tbody></table></div>` : '<div class="empty">No signal history yet. Successful observations will appear after a report run.</div>'}</section>`;
 }
 function renderTrackRecord(history: HistoryEntry[]) {
   const resolved = history.filter(h => !h.invalidated && h.resolved === true && prob(h.dreamdexBrier) && prob(h.ensembleBrier));

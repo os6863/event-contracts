@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs, normalizePrivateKey } from "./analysis.js";
+import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs, normalizePrivateKey, isImplausibleOpeningPrice } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
 import type { ReportRow, HistoryEntry } from "./types.js";
@@ -258,6 +258,29 @@ test("computeRealizedVolatility: constant prices are zero volatility; more dispe
   const calm = computeRealizedVolatility([100, 100.2, 99.9, 100.3, 99.8], 60);
   const volatile = computeRealizedVolatility([100, 110, 92, 115, 88], 60);
   assert.ok(calm !== null && volatile !== null && volatile > calm);
+});
+test("isImplausibleOpeningPrice: catches a units/decimals mismatch without flagging genuine price moves — using the exact real numbers from a live bug", () => {
+  // The actual corrupted market: opening price ~1,000,000x too large.
+  assert.equal(isImplausibleOpeningPrice(79610750000, 79214), true);
+  assert.equal(isImplausibleOpeningPrice(2450580000, 2492.705), true);
+  // The 8 markets in the same live run that were already correctly scaled — must NOT be flagged.
+  assert.equal(isImplausibleOpeningPrice(79244.65, 79242), false);
+  assert.equal(isImplausibleOpeningPrice(2495.26, 2493.485), false);
+  assert.equal(isImplausibleOpeningPrice(80346.7, 79221), false); // an 8.6% real move — well within range
+  // Edges
+  assert.equal(isImplausibleOpeningPrice(0, 100), true);
+  assert.equal(isImplausibleOpeningPrice(100, 0), true);
+  assert.equal(isImplausibleOpeningPrice(-5, 100), true);
+  assert.equal(isImplausibleOpeningPrice(4900, 100), false); // exactly at the 49x edge — still plausible
+  assert.equal(isImplausibleOpeningPrice(5100, 100), true); // just past 51x — implausible
+});
+test("history table shows which side's prediction was actually closer to settlement, only for resolved records", () => {
+  const edgescopeCloser = renderReport([row], [{ ...entry, resolved: true, actualOutcome: "YES" }], row.observedAt!); // dreamdexUp .3 (err .7) vs ensembleEst .675 (err .325)
+  assert.ok(edgescopeCloser.includes('data-label="Closer call">EdgeScope</td>'));
+  const dreamdexCloser = renderReport([row], [{ ...entry, dreamdexUp: .95, ensembleEst: .1, resolved: true, actualOutcome: "YES" }], row.observedAt!);
+  assert.ok(dreamdexCloser.includes('data-label="Closer call">DreamDEX</td>'));
+  const unresolved = renderReport([row], [entry], row.observedAt!); // no `resolved` field at all
+  assert.ok(unresolved.includes('data-label="Closer call">—</td>'));
 });
 test("normalizePrivateKey: adds a missing 0x prefix, trims whitespace, and rejects anything that isn't exactly 32 bytes of hex", () => {
   const key = "a".repeat(64);

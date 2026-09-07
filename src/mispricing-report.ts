@@ -1,5 +1,5 @@
 /** EdgeScope report pipeline: receipt-checked estimates, timestamped snapshots, HTML renderer. */
-import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs, normalizePrivateKey } from "./analysis.js";
+import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs, normalizePrivateKey, isImplausibleOpeningPrice } from "./analysis.js";
 import type { ReportRow } from "./types.js";
 import { appendSignalHistory, readHistory } from "./history.js";
 import { writeReport } from "./report-ui.js";
@@ -651,6 +651,11 @@ async function main() {
         row.priceSourceQuality = MULTI_SOURCE_PRICE
           ? priceSourceQuality(observation.sources.length, PRICE_SOURCES[m.asset]?.length ?? 1)
           : "single-source-fallback";
+        if (isImplausibleOpeningPrice(row.openingPrice, row.currentPrice)) {
+          row.issue = `Opening price ($${row.openingPrice.toLocaleString()}) is implausible next to the independent current price ($${row.currentPrice.toLocaleString()}) — likely a units/decimals mismatch from the indexer for this specific market. Skipped rather than computing a fabricated price move.`;
+          row.openingPrice = null;
+          continue;
+        }
         // Refresh the venue quote and trading status immediately before preparing the estimate.
         const onchain = await exchange.client.getMarketOnchain(m.marketId as Hex);
         if (onchain.status !== STATUS_TRADING) { row.issue = "Market is no longer trading."; continue; }

@@ -145,6 +145,26 @@ export function normalizePrivateKey(raw: string | undefined): `0x${string}` {
   return withPrefix as `0x${string}`;
 }
 
+/**
+ * Sanity check between an on-chain opening price and an independently
+ * fetched current price. Caught live: two long-dated markets returned an
+ * opening price roughly 1,000,000x too large (a units/decimals mismatch
+ * from the indexer for that specific market, not a universal scaling
+ * factor — most markets return correctly-scaled values), which fed a
+ * fabricated ~-100% price move into the estimators and produced a false
+ * "strong signal". A genuine price move, even in a volatile crypto market
+ * over one contract's life, should never approach the scale of a units
+ * mismatch (100x, 10,000x, 1,000,000x) — this catches exactly that class
+ * of bug without assuming any particular fixed decimals convention (which
+ * would risk breaking the majority of markets that are already correctly
+ * scaled, as a blanket "divide by 10^6" fix would have here).
+ */
+export function isImplausibleOpeningPrice(openingPrice: number, currentPrice: number): boolean {
+  if (!(openingPrice > 0) || !(currentPrice > 0)) return true;
+  const ratio = openingPrice / currentPrice;
+  return ratio > 50 || ratio < 1 / 50;
+}
+
 export function medianOf(values: number[]): number {
   if (!values.length) throw new Error("medianOf: empty array");
   const sorted = [...values].sort((a, b) => a - b);
