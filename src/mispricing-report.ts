@@ -355,29 +355,71 @@ type MultiSourcePriceResult = { price: number; sources: string[]; failed: { name
 // Agent: unlike the point-in-time price (which is evidence a report claim
 // rests on and must be independently verifiable), this is a model
 // calibration input — how volatile has this asset actually been, not what
-// is its price right now. A plain HTTPS call to Binance's public klines
-// endpoint is honest about what it is: an off-chain statistical input, not
-// an on-chain-verified fact. USE_REALIZED_VOLATILITY defaults on; set it to
-// "false" to revert to the fixed disclosed constant with no code change.
+// is its price right now. A plain HTTPS call is honest about what it is: an
+// off-chain statistical input, not an on-chain-verified fact.
+// USE_REALIZED_VOLATILITY defaults on; set it to "false" to revert to the
+// fixed disclosed constant with no code change.
 const USE_REALIZED_VOLATILITY = process.env.USE_REALIZED_VOLATILITY !== "false";
-const REALIZED_VOL_SYMBOLS: Record<string, string> = { BTC: "BTCUSDT", ETH: "ETHUSDT" };
-const REALIZED_VOL_INTERVAL_MINUTES = 60; // "1h" candles
+const REALIZED_VOL_COINGECKO_IDS: Record<string, string> = { BTC: "bitcoin", ETH: "ethereum" };
+const REALIZED_VOL_BINANCE_SYMBOLS: Record<string, string> = { BTC: "BTCUSDT", ETH: "ETHUSDT" };
+const REALIZED_VOL_INTERVAL_MINUTES = 60; // hourly granularity, both sources
+const REALIZED_VOL_LOOKBACK_DAYS = 7;
 const REALIZED_VOL_LOOKBACK_CANDLES = 168; // 7 days of hourly candles
 
-async function fetchRealizedVolatility(asset: string): Promise<number | null> {
-  const symbol = REALIZED_VOL_SYMBOLS[asset];
+async function fetchRealizedVolatilityFromCoinGecko(asset: string): Promise<number | null> {
+  const id = REALIZED_VOL_COINGECKO_IDS[asset];
+  if (!id) return null;
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${REALIZED_VOL_LOOKBACK_DAYS}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`CoinGecko market_chart HTTP ${res.status}`);
+  const data = await res.json();
+  const prices = data?.prices;
+  if (!Array.isArray(prices)) throw new Error("CoinGecko market_chart: unexpected response shape");
+  const closes = prices.map((p: unknown[]) => Number(p[1])).filter((n) => Number.isFinite(n) && n > 0);
+  return computeRealizedVolatility(closes, REALIZED_VOL_INTERVAL_MINUTES);
+}
+
+async function fetchRealizedVolatilityFromBinance(asset: string): Promise<number | null> {
+  const symbol = REALIZED_VOL_BINANCE_SYMBOLS[asset];
   if (!symbol) return null;
+  const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${REALIZED_VOL_LOOKBACK_CANDLES}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`Binance klines HTTP ${res.status}`);
+  const klines = await res.json();
+  if (!Array.isArray(klines)) throw new Error("Binance klines: unexpected response shape");
+  const closes = klines.map((k: unknown[]) => Number(k[4])).filter((n) => Number.isFinite(n) && n > 0);
+  return computeRealizedVolatility(closes, REALIZED_VOL_INTERVAL_MINUTES);
+}
+
+/**
+ * Tries CoinGecko first, then Binance, before the caller falls back to the
+ * fixed disclosed assumption. Order matters: Binance blocks requests from
+ * many cloud-datacenter IP ranges (including GitHub Actions runners) for
+ * regulatory reasons — caught live, a scheduled CI run silently fell back
+ * to the fixed assumption for every market while the exact same code
+ * worked from a home connection. CoinGecko has no equivalent restriction
+ * and is already used elsewhere in this file as a price source, so it goes
+ * first; Binance is kept as a second attempt for environments where it
+ * *is* reachable, rather than removed outright — geographic/network
+ * diversity across two independent sources lowers the odds that both are
+ * unreachable at once. Logs the actual failure reason at each step instead
+ * of silently swallowing it, so a future failure is diagnosable from
+ * console output alone.
+ */
+async function fetchRealizedVolatility(asset: string): Promise<{ vol: number; source: string } | null> {
   try {
-    const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${REALIZED_VOL_LOOKBACK_CANDLES}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (!res.ok) return null;
-    const klines = await res.json();
-    if (!Array.isArray(klines)) return null;
-    const closes = klines.map((k) => Number(k[4])).filter((n) => Number.isFinite(n) && n > 0);
-    return computeRealizedVolatility(closes, REALIZED_VOL_INTERVAL_MINUTES);
-  } catch {
-    return null; // network error, timeout, or malformed response — silently fall back to the static assumption
+    const vol = await fetchRealizedVolatilityFromCoinGecko(asset);
+    if (vol !== null) return { vol, source: "CoinGecko" };
+  } catch (error) {
+    console.log(`  Realized volatility (CoinGecko) failed for ${asset}: ${error instanceof Error ? error.message : String(error)}`);
   }
+  try {
+    const vol = await fetchRealizedVolatilityFromBinance(asset);
+    if (vol !== null) return { vol, source: "Binance" };
+  } catch (error) {
+    console.log(`  Realized volatility (Binance) failed for ${asset}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return null;
 }
 
 /**
@@ -685,11 +727,11 @@ async function main() {
         let realizedVol: number | null = null;
         if (USE_REALIZED_VOLATILITY) {
           if (!realizedVols.has(m.asset)) {
-            const vol = await fetchRealizedVolatility(m.asset);
-            realizedVols.set(m.asset, vol);
-            console.log(vol !== null
-              ? `Realized volatility for ${m.asset}: ${(vol * 100).toFixed(1)}% annualized (7d, Binance klines) — replacing the fixed assumption.`
-              : `Realized volatility for ${m.asset} unavailable; using the fixed disclosed assumption.`);
+            const result = await fetchRealizedVolatility(m.asset);
+            realizedVols.set(m.asset, result?.vol ?? null);
+            console.log(result
+              ? `Realized volatility for ${m.asset}: ${(result.vol * 100).toFixed(1)}% annualized (7d, ${result.source}) — replacing the fixed assumption.`
+              : `Realized volatility for ${m.asset} unavailable from any source; using the fixed disclosed assumption.`);
           }
           realizedVol = realizedVols.get(m.asset) ?? null;
         }
