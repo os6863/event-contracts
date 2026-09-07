@@ -1,5 +1,5 @@
 /** EdgeScope report pipeline: receipt-checked estimates, timestamped snapshots, HTML renderer. */
-import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs } from "./analysis.js";
+import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs, normalizePrivateKey } from "./analysis.js";
 import type { ReportRow } from "./types.js";
 import { appendSignalHistory, readHistory } from "./history.js";
 import { writeReport } from "./report-ui.js";
@@ -592,9 +592,7 @@ async function main() {
     console.log("Rendered saved snapshot without agent calls or history append.");
     return;
   }
-  const privateKey = process.env.PRIVATE_KEY;
-  if (!privateKey) throw new Error("PRIVATE_KEY is not set in .env");
-  const account = privateKeyToAccount(privateKey as Hex);
+  const account = privateKeyToAccount(normalizePrivateKey(process.env.PRIVATE_KEY));
   const exchange = new SomniaMarkets({ indexerUrl: INDEXER_URL, chain: somniaShannon,
     wsRpcUrl: WS_RPC_URL, addresses: SOMNIA_TESTNET_ADDRESSES });
   const transport = fallback(RPC_URLS.map(url => http(url)));

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs } from "./analysis.js";
+import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf, computeRealizedVolatility, priceSourceQuality, indexerBackoffDelayMs, normalizePrivateKey } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
 import type { ReportRow, HistoryEntry } from "./types.js";
@@ -258,6 +258,16 @@ test("computeRealizedVolatility: constant prices are zero volatility; more dispe
   const calm = computeRealizedVolatility([100, 100.2, 99.9, 100.3, 99.8], 60);
   const volatile = computeRealizedVolatility([100, 110, 92, 115, 88], 60);
   assert.ok(calm !== null && volatile !== null && volatile > calm);
+});
+test("normalizePrivateKey: adds a missing 0x prefix, trims whitespace, and rejects anything that isn't exactly 32 bytes of hex", () => {
+  const key = "a".repeat(64);
+  assert.equal(normalizePrivateKey(key), `0x${key}`); // missing 0x — the exact bug caught live in a GitHub Actions secret
+  assert.equal(normalizePrivateKey(`0x${key}`), `0x${key}`); // already correct
+  assert.equal(normalizePrivateKey(`  0x${key}  \n`), `0x${key}`); // stray whitespace
+  assert.throws(() => normalizePrivateKey(undefined), /not set/);
+  assert.throws(() => normalizePrivateKey(""), /not set/);
+  assert.throws(() => normalizePrivateKey("0x" + "a".repeat(63)), /32-byte/); // one char short
+  assert.throws(() => normalizePrivateKey("not-hex-at-all"), /32-byte/);
 });
 test("indexerBackoffDelayMs: doubles each attempt from the base", () => {
   assert.equal(indexerBackoffDelayMs(1, 3000), 3000);
