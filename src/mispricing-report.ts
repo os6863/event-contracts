@@ -1,5 +1,5 @@
 /** v0.0.0.10: receipt-checked estimates, timestamped snapshots, EdgeScope renderer. */
-import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity } from "./analysis.js";
+import { naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, classifyLiquidity, medianOf } from "./analysis.js";
 import type { ReportRow } from "./types.js";
 import { appendSignalHistory, readHistory } from "./history.js";
 import { writeReport } from "./report-ui.js";
@@ -65,6 +65,36 @@ const COINGECKO_URL =
   "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd";
 const PRICE_DECIMALS = 8;
 const ASSET_SELECTORS: Record<string, string> = { BTC: "bitcoin.usd", ETH: "ethereum.usd" };
+
+// --- Multi-source price (new: post-submission addition) -----------------
+// Each source is fetched through the SAME verifiable on-chain JSON API
+// Request Agent as the original single-source CoinGecko call — this is
+// not a plain off-chain fetch, so the "verifiable on-chain evidence" claim
+// in the report still holds for every source, not just the first one.
+// Kraken was deliberately left out: its ticker response keys the result
+// under a pair-specific name the fetchUint agent's fixed selector can't
+// resolve without a hardcoded lookup table (XXBTZUSD, XETHZUSD, ...) —
+// untested against the live agent, and not worth the risk this close to
+// the deadline. Binance and Coinbase both expose a fixed, predictable
+// field name regardless of pair.
+type PriceSource = { name: string; url: string; selector: string };
+const PRICE_SOURCES: Record<string, PriceSource[]> = {
+  BTC: [
+    { name: "CoinGecko", url: COINGECKO_URL, selector: "bitcoin.usd" },
+    { name: "Binance", url: "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT", selector: "price" },
+    { name: "Coinbase", url: "https://api.coinbase.com/v2/prices/BTC-USD/spot", selector: "data.amount" },
+  ],
+  ETH: [
+    { name: "CoinGecko", url: COINGECKO_URL, selector: "ethereum.usd" },
+    { name: "Binance", url: "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT", selector: "price" },
+    { name: "Coinbase", url: "https://api.coinbase.com/v2/prices/ETH-USD/spot", selector: "data.amount" },
+  ],
+};
+// Opt-out, not opt-in: defaults on since this is the whole point of the
+// change, but a single env edit reverts to the original single-source
+// behavior with no code change if the shared Agent is under contention
+// or a new source turns out to be unreliable during local testing.
+const MULTI_SOURCE_PRICE = process.env.MULTI_SOURCE_PRICE !== "false";
 
 // --- LLM Inference agent (new in this version) --------------------------
 // Verify this id still resolves at https://agents.testnet.somnia.network
@@ -302,6 +332,66 @@ async function fetchPriceViaAgent(
   return result;
 }
 
+async function fetchPriceFromSource(
+  publicClient: ReturnType<typeof createPublicClient>,
+  walletClient: ReturnType<typeof createWalletClient>,
+  source: PriceSource
+): Promise<number> {
+  const payload = encodeFunctionData({ abi: fetchUintAbi, functionName: "fetchUint", args: [source.url, source.selector, PRICE_DECIMALS] });
+  const { receipt } = await submitAgentRequest(
+    publicClient, walletClient, JSON_API_REQUEST_AGENT_ID, JSON_API_REQUEST_EXECUTION_COST, payload, JSON_API_REQUEST_TIMEOUT_MS
+  );
+  const result = decodeFunctionResult({ abi: fetchUintAbi, functionName: "fetchUint", data: receipt.agentReceipt!.result });
+  if (typeof result !== "bigint") throw new Error(`Unexpected decoded result type from fetchUint (${source.name}): ${typeof result}`);
+  const price = Number(result) / 10 ** PRICE_DECIMALS;
+  if (!Number.isFinite(price) || price <= 0) throw new Error(`Invalid price from ${source.name}`);
+  return price;
+}
+
+type MultiSourcePriceResult = { price: number; sources: string[]; failed: { name: string; error: string }[] };
+
+/**
+ * Queries every configured source for `asset` through independent on-chain
+ * Agent calls and takes the median of whichever succeed. Deliberately
+ * sequential, not concurrent: each source call signs and sends a real
+ * wallet transaction (`submitAgentRequest` -> `writeContract`), and firing
+ * several from the same account concurrently races viem's nonce lookup —
+ * two calls can read the same pending nonce before either transaction is
+ * tracked, so one silently loses. This is not hypothetical: the first live
+ * run against the real testnet agent showed CoinGecko (previously reliable
+ * across every prior version's live runs) fail at the same moment as
+ * Coinbase while only Binance succeeded — the signature of a nonce race,
+ * not three independent source outages. Sequential calls cost a few extra
+ * seconds (each JSON API Request Agent call is typically ~2s per the docs)
+ * but the wallet only ever has one write in flight at a time, matching
+ * every other write path in this file. Does not require a minimum source
+ * count: one live source is still a real, verifiable price and is better
+ * than failing the whole market closed, but `sources`/`failed` are always
+ * returned so the caller (and the report) can show exactly how many
+ * independent sources actually backed the number — never silently
+ * presenting a one-source read as if it were a full median.
+ */
+async function fetchMultiSourcePrice(
+  publicClient: ReturnType<typeof createPublicClient>,
+  walletClient: ReturnType<typeof createWalletClient>,
+  asset: string
+): Promise<MultiSourcePriceResult> {
+  const sources = PRICE_SOURCES[asset];
+  if (!sources) throw new Error(`No price sources configured for ${asset}`);
+  const ok: { name: string; price: number }[] = [];
+  const failed: { name: string; error: string }[] = [];
+  for (const source of sources) {
+    try {
+      const price = await fetchPriceFromSource(publicClient, walletClient, source);
+      ok.push({ name: source.name, price });
+    } catch (error) {
+      failed.push({ name: source.name, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  if (!ok.length) throw new Error(`All price sources failed for ${asset}: ${failed.map((f) => `${f.name}: ${f.error}`).join("; ")}`);
+  return { price: medianOf(ok.map((o) => o.price)), sources: ok.map((o) => o.name), failed };
+}
+
 class InvalidEstimate extends Error {
   constructor(message: string, public requestId: string, public receiptUrl: string, public thinking: string | null) { super(message); }
 }
@@ -459,7 +549,7 @@ Estimate the probability that this market resolves YES (price closes at or above
 const versionDir = dirname(fileURLToPath(import.meta.url));
 const root = join(versionDir, "..");
 
-type PriceObservation = { price: number; observedMs: number };
+type PriceObservation = { price: number; observedMs: number; sources: string[] };
 
 async function main() {
   if (process.argv.includes("--render-only")) {
@@ -501,19 +591,31 @@ async function main() {
         if (row.openingPrice === null || !Number.isFinite(row.openingPrice) || row.openingPrice <= 0) {
           row.openingPrice = null; row.issue = "Opening price unavailable."; continue;
         }
-        const selector = ASSET_SELECTORS[m.asset];
-        if (!selector) { row.issue = "No price source for this asset."; continue; }
+        const hasSource = MULTI_SOURCE_PRICE ? Boolean(PRICE_SOURCES[m.asset]) : Boolean(ASSET_SELECTORS[m.asset]);
+        if (!hasSource) { row.issue = "No price source for this asset."; continue; }
         let observation = prices.get(m.asset);
         if (!observation || Date.now() - observation.observedMs > 60000) {
-          console.log(`Requesting ${m.asset} price via Somnia Agent...`);
-          const raw = await fetchPriceViaAgent(publicClient, walletClient, selector);
-          const price = Number(raw) / 10 ** PRICE_DECIMALS;
-          if (!Number.isFinite(price) || price <= 0) throw new Error("Invalid price-agent value");
-          observation = { price, observedMs: Date.now() };
+          if (MULTI_SOURCE_PRICE) {
+            const configured = PRICE_SOURCES[m.asset].length;
+            console.log(`Requesting ${m.asset} price from up to ${configured} independent sources via Somnia Agents...`);
+            const result = await fetchMultiSourcePrice(publicClient, walletClient, m.asset);
+            if (result.failed.length) {
+              console.log(`  ${result.failed.length}/${configured} source(s) failed; median of ${result.sources.length} (${result.sources.join(", ")})`);
+              for (const f of result.failed) console.log(`    ${f.name}: ${f.error}`);
+            }
+            observation = { price: result.price, observedMs: Date.now(), sources: result.sources };
+          } else {
+            console.log(`Requesting ${m.asset} price via Somnia Agent...`);
+            const raw = await fetchPriceViaAgent(publicClient, walletClient, ASSET_SELECTORS[m.asset]);
+            const price = Number(raw) / 10 ** PRICE_DECIMALS;
+            if (!Number.isFinite(price) || price <= 0) throw new Error("Invalid price-agent value");
+            observation = { price, observedMs: Date.now(), sources: ["CoinGecko"] };
+          }
           prices.set(m.asset, observation);
         }
         row.currentPrice = observation.price;
         row.priceObservedAt = new Date(observation.observedMs).toISOString();
+        row.priceSources = observation.sources;
         // Refresh the venue quote and trading status immediately before preparing the estimate.
         const onchain = await exchange.client.getMarketOnchain(m.marketId as Hex);
         if (onchain.status !== STATUS_TRADING) { row.issue = "Market is no longer trading."; continue; }

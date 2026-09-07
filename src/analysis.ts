@@ -74,6 +74,13 @@ export function validateLlmResult(raw: bigint, finalAnswer: unknown): number {
   if (BigInt(finalAnswer.trim()) !== raw) throw new Error("LLM final answer disagrees with ABI result");
   return Number(raw) / 10000;
 }
+/** Median of one or more values. Even-length inputs average the two middle values. */
+export function medianOf(values: number[]): number {
+  if (!values.length) throw new Error("medianOf: empty array");
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
 export function remainingMinutes(expirySeconds: number, observedMs = Date.now()): number {
   return (expirySeconds * 1000 - observedMs) / 60000;
 }

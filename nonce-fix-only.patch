@@ -1,0 +1,83 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 099d676..b2c3995 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -102,3 +102,11 @@ The prior entry above declined "multi-source price (Binance/Coinbase/Kraken medi
+ - `npm run typecheck`: passed.
+ - `npm test`: **19/19** passed (17 prior + 2 new: `medianOf` behavior, and the report rendering the source count/names).
+ - **Not yet validated against the live Somnia Agent / testnet.** `fetchPriceFromSource`'s selectors for Binance (`price`) and Coinbase (`data.amount`) are inferred from each exchange's public REST response shape, not confirmed against a real `fetchUint` agent call — this needs a funded testnet wallet to actually exercise, which this session does not have. Run `MAX_MARKETS=1 npm run report` locally with a funded disposable wallet before relying on this in a demo; keep `MULTI_SOURCE_PRICE=false` as an immediate fallback if a source's selector turns out to be wrong on the live agent.
++
++### Bug caught by the first live run against the real testnet Agent
++
++The first `MAX_MARKETS=1` run against the live Somnia Agent showed 2/3 price sources fail (CoinGecko and Coinbase) while only Binance succeeded — with CoinGecko, reliable across every prior version's live runs, failing at the exact same moment as Coinbase. That pattern is a nonce race, not three independent source outages: `fetchMultiSourcePrice` originally fired all three sources' `submitAgentRequest` calls concurrently via `Promise.allSettled`, and each one signs and sends a real wallet transaction — concurrent writes from the same account race viem's nonce lookup, so two calls can read the same pending nonce before either transaction is tracked, silently dropping one.
++
++Fixed by making the per-source calls sequential (a plain `for` loop with `await`), matching every other write path in this file, which never has more than one wallet write in flight at a time. Costs a few extra seconds per price refresh (each JSON API Request Agent call is ~2s per the docs) in exchange for not racing the account's own nonce. Console output also now prints each failed source's actual error message, not just its name, so a genuine future source failure is diagnosable without re-instrumenting.
++
++`npm run typecheck` passed; `npm test` — 19/19 passed (no test change; this is a live-agent concurrency bug the local test suite cannot catch, since it doesn't mock wallet writes — the pure-function tests around `medianOf` and the fallback/rendering logic were correct throughout).
+diff --git a/src/mispricing-report.ts b/src/mispricing-report.ts
+index e727f29..da67d9d 100644
+--- a/src/mispricing-report.ts
++++ b/src/mispricing-report.ts
+@@ -352,12 +352,24 @@ type MultiSourcePriceResult = { price: number; sources: string[]; failed: { name
+ 
+ /**
+  * Queries every configured source for `asset` through independent on-chain
+- * Agent calls and takes the median of whichever ones succeed. Deliberately
+- * does not require a minimum count: one live source is still a real,
+- * verifiable price and is better than failing the whole market closed, but
+- * `sources`/`failed` are always returned so the caller (and the report) can
+- * show exactly how many independent sources actually backed the number —
+- * never silently presenting a one-source read as if it were a full median.
++ * Agent calls and takes the median of whichever succeed. Deliberately
++ * sequential, not concurrent: each source call signs and sends a real
++ * wallet transaction (`submitAgentRequest` -> `writeContract`), and firing
++ * several from the same account concurrently races viem's nonce lookup —
++ * two calls can read the same pending nonce before either transaction is
++ * tracked, so one silently loses. This is not hypothetical: the first live
++ * run against the real testnet agent showed CoinGecko (previously reliable
++ * across every prior version's live runs) fail at the same moment as
++ * Coinbase while only Binance succeeded — the signature of a nonce race,
++ * not three independent source outages. Sequential calls cost a few extra
++ * seconds (each JSON API Request Agent call is typically ~2s per the docs)
++ * but the wallet only ever has one write in flight at a time, matching
++ * every other write path in this file. Does not require a minimum source
++ * count: one live source is still a real, verifiable price and is better
++ * than failing the whole market closed, but `sources`/`failed` are always
++ * returned so the caller (and the report) can show exactly how many
++ * independent sources actually backed the number — never silently
++ * presenting a one-source read as if it were a full median.
+  */
+ async function fetchMultiSourcePrice(
+   publicClient: ReturnType<typeof createPublicClient>,
+@@ -366,13 +378,16 @@ async function fetchMultiSourcePrice(
+ ): Promise<MultiSourcePriceResult> {
+   const sources = PRICE_SOURCES[asset];
+   if (!sources) throw new Error(`No price sources configured for ${asset}`);
+-  const settled = await Promise.allSettled(sources.map((s) => fetchPriceFromSource(publicClient, walletClient, s)));
+   const ok: { name: string; price: number }[] = [];
+   const failed: { name: string; error: string }[] = [];
+-  settled.forEach((r, i) => {
+-    if (r.status === "fulfilled") ok.push({ name: sources[i].name, price: r.value });
+-    else failed.push({ name: sources[i].name, error: r.reason instanceof Error ? r.reason.message : String(r.reason) });
+-  });
++  for (const source of sources) {
++    try {
++      const price = await fetchPriceFromSource(publicClient, walletClient, source);
++      ok.push({ name: source.name, price });
++    } catch (error) {
++      failed.push({ name: source.name, error: error instanceof Error ? error.message : String(error) });
++    }
++  }
+   if (!ok.length) throw new Error(`All price sources failed for ${asset}: ${failed.map((f) => `${f.name}: ${f.error}`).join("; ")}`);
+   return { price: medianOf(ok.map((o) => o.price)), sources: ok.map((o) => o.name), failed };
+ }
+@@ -585,7 +600,8 @@ async function main() {
+             console.log(`Requesting ${m.asset} price from up to ${configured} independent sources via Somnia Agents...`);
+             const result = await fetchMultiSourcePrice(publicClient, walletClient, m.asset);
+             if (result.failed.length) {
+-              console.log(`  ${result.failed.length}/${configured} source(s) failed (${result.failed.map((f) => f.name).join(", ")}); median of ${result.sources.length}`);
++              console.log(`  ${result.failed.length}/${configured} source(s) failed; median of ${result.sources.length} (${result.sources.join(", ")})`);
++              for (const f of result.failed) console.log(`    ${f.name}: ${f.error}`);
+             }
+             observation = { price: result.price, observedMs: Date.now(), sources: result.sources };
+           } else {

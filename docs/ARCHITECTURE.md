@@ -18,7 +18,7 @@ EdgeScope is a read-only market-intelligence pipeline for DreamDEX Event Contrac
 ## Trust boundaries
 
 - DreamDEX order-book data is venue data and is not substituted with the external price source.
-- CoinGecko is an independent off-chain price input consumed through Somnia Agents; it is not claimed to reproduce DreamDEX's settlement oracle.
+- The independent price input is the median of up to three off-chain sources (CoinGecko, Binance, Coinbase), each consumed through its own Somnia Agent call; it is not claimed to reproduce DreamDEX's settlement oracle.
 - Agent execution and receipts are verifiable; malformed or mismatched final answers are rejected.
 - Thin, one-sided, or wide-spread books never produce a mispricing signal.
 - Settlement scoring uses on-chain market state.

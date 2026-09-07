@@ -41,6 +41,6 @@ After a market resolves, EdgeScope reads the on-chain winning outcome and comput
 
 ## Interpretation limits
 
-- CoinGecko is an independent external reference, not DreamDEX's settlement oracle.
+- The independent price reference is the median of up to three external sources (CoinGecko, Binance, Coinbase), not DreamDEX's settlement oracle.
 - The deterministic and LLM estimates share the same underlying observed price move and are not fully independent evidence.
 - Simulated edge statistics are hypothetical flat-stake calculations over the small resolved sample and are not a profitability claim.

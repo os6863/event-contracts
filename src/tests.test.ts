@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier } from "./analysis.js";
+import { normalCDF, naiveProbability, computeAgreement, validateLlmResult, remainingMinutes, computeSimulatedEdge, classifyLiquidity, computeUniqueMarketBrier, medianOf } from "./analysis.js";
 import { renderReport, formatProbability } from "./report-ui.js";
 import { readHistory, saveHistory, appendSignalHistory, uncheckedIds, settleEntries } from "./history.js";
 import type { ReportRow, HistoryEntry } from "./types.js";
@@ -193,6 +193,24 @@ test("simulated edge section renders resolved trades and an explicit empty state
 });
 test("rendering leaves all analytical values and ordering untouched", () => {
   const rows=[{...row,agreement:"none" as const},{...row}];const before=structuredClone(rows);renderReport(rows,[entry],row.observedAt!);assert.deepEqual(rows,before);
+});
+test("medianOf: odd count returns the middle value, even count averages the two middle values, order and duplicates don't matter", () => {
+  assert.equal(medianOf([5]), 5);
+  assert.equal(medianOf([3, 1, 2]), 2);
+  assert.equal(medianOf([1, 2]), 1.5);
+  assert.equal(medianOf([4, 1, 3, 2]), 2.5);
+  assert.equal(medianOf([10, 10, 10]), 10);
+  assert.equal(medianOf([100000.5, 100000.7, 900000]), 100000.7); // one wildly-off source doesn't move a 3-source median
+  assert.throws(() => medianOf([]));
+});
+test("multi-source price row renders the source count and names in the verification snapshot", () => {
+  const html = renderReport([{ ...row, priceSources: ["CoinGecko", "Binance"] }], [entry], row.observedAt!);
+  assert.ok(html.includes("median of 2"));
+  assert.ok(html.includes("CoinGecko, Binance"));
+  const singleSource = renderReport([{ ...row, priceSources: ["CoinGecko"] }], [entry], row.observedAt!);
+  assert.ok(singleSource.includes("median of 1"));
+  const noSourceInfo = renderReport([{ ...row, priceSources: undefined }], [entry], row.observedAt!);
+  assert.ok(!noSourceInfo.includes("median of"));
 });
 test("empty report, missing reasoning and invalid numbers render safely", async () => {
   const html=renderReport([],[],row.observedAt!);assert.ok(html.includes("No active signal data"));assert.ok(html.includes("No verified settlement"));

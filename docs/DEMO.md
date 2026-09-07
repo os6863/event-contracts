@@ -38,4 +38,9 @@ A fresh report run uses Somnia Agents and therefore needs a funded disposable te
 - Agent execution/receipts are verifiable; the CoinGecko price input is off-chain.
 - The external reference is intentionally independent and is not claimed to reproduce DreamDEX's settlement oracle.
 - Illiquid books are rejected before signal classification.
+
+## Say this before a judge asks it
+
+- **"Why doesn't this trade?"** — Lead with the positioning, don't wait to be asked: EdgeScope is a trust/price-discovery layer other Event Contracts builders (market makers, bots, consumer apps) can build on, not a competing end-user trading app. State this in the first 30 seconds.
+- **"Your sample size is tiny / your win rate is 0%."** — Point at the Simulated Edge panel yourself before a judge does. Say plainly: this is a transparency diagnostic on a small testnet sample, not a profitability claim, and the panel is designed to show an honest bad number rather than hide one. Do not let the panel's small-sample honesty read as the product failing.
 - EdgeScope is analytics, not an automated trading bot.

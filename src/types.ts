@@ -9,6 +9,8 @@ export type ReportRow = {
   oracleQuestionId?: string | null;
   openingPrice: number | null;
   currentPrice: number | null;
+  /** Names of the independent price sources whose median produced `currentPrice` (e.g. ["CoinGecko","Binance"]). */
+  priceSources?: string[];
   movePct: number | null;
   dreamdexUp: number | null;
   liquidityState?: LiquidityState;

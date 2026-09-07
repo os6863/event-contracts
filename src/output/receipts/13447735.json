@@ -1,0 +1,79 @@
+{
+  "requestId": "13447735",
+  "transactionHash": "0xad85e8e13014a8ca0386c6025b1dfc36c47d9b48284026c213d8f3e36933ecf6",
+  "receipt": {
+    "requestId": "13447735",
+    "agentId": "13174292974160097713",
+    "contractAddress": "0x037bb9c718f3f7fe5ecbdb0b600d607b52706776",
+    "agentRunnerAddress": "0x05f1fE2DDF9B65576D3165E37C6A60e6c5Ba93De",
+    "runnerVersion": "e2d9b9aa1ed095b28527636761ed10d0126e82e9",
+    "runnerBuildTime": "2026-08-10T15:53:49Z",
+    "consensusType": 0,
+    "requestDetails": {
+      "requester": "0x0bD60830cd456F5eEdE128Da6f8Beb8d4383971E",
+      "callbackAddress": "0x0000000000000000000000000000000000000000",
+      "callbackSelector": "0x00000000",
+      "threshold": 2,
+      "subcommitteeSize": 3,
+      "timeoutSeconds": 600,
+      "deadline": 1788785011
+    },
+    "status": "success",
+    "startedAt": "2026-09-07T12:33:31.356039567Z",
+    "completedAt": "2026-09-07T12:33:31.612970053Z",
+    "elapsedMs": 256,
+    "agentImageUri": "https://storage.googleapis.com/somnia-agents-artifacts/agents/json-fetch/6d0568ce712510b53f7f43f8f879a2dae03c36e1.tar",
+    "agentImageVersion": "9ea2457cdd8efedb",
+    "request": "0x3bbc1302000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000003a68747470733a2f2f6170692e62696e616e63652e636f6d2f6170692f76332f7469636b65722f70726963653f73796d626f6c3d4254435553445400000000000000000000000000000000000000000000000000000000000000000000000000057072696365000000000000000000000000000000000000000000000000000000",
+    "agentReceipt": {
+      "bandwidthUsage": {
+        "bytesIn": 0,
+        "bytesOut": 45,
+        "requests": 1
+      },
+      "llmUsage": {
+        "completionTokens": 0,
+        "promptTokens": 0,
+        "requests": 0,
+        "streamingRequests": 0,
+        "totalTokens": 0
+      },
+      "request": "0x3bbc1302000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000003a68747470733a2f2f6170692e62696e616e63652e636f6d2f6170692f76332f7469636b65722f70726963653f73796d626f6c3d4254435553445400000000000000000000000000000000000000000000000000000000000000000000000000057072696365000000000000000000000000000000000000000000000000000000",
+      "result": "0x0000000000000000000000000000000000000000000000000000073b3c971840",
+      "steps": [
+        {
+          "name": "request_received",
+          "requestId": "13447735",
+          "started_at": "2026-09-07T12:33:31.356Z"
+        },
+        {
+          "argsCount": 3,
+          "functionName": "fetchUint",
+          "name": "request_decoded",
+          "started_at": "2026-09-07T12:33:31.356Z"
+        },
+        {
+          "functionName": "fetchUint",
+          "name": "handler_started",
+          "started_at": "2026-09-07T12:33:31.356Z"
+        },
+        {
+          "completed_at": "2026-09-07T12:33:31.612Z",
+          "elapsed_ms": 256,
+          "functionName": "fetchUint",
+          "name": "handler_completed",
+          "started_at": "2026-09-07T12:33:31.356Z"
+        },
+        {
+          "name": "response_encoded",
+          "responseLength": 66,
+          "started_at": "2026-09-07T12:33:31.612Z"
+        }
+      ]
+    },
+    "response": {
+      "status": 200,
+      "size": 32
+    }
+  }
+}
