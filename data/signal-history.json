@@ -958,7 +958,13 @@
     "divergence": 0.20124836653882422,
     "agreement": "weak",
     "requestId": "13554352",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13554352"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13554352",
+    "resolved": true,
+    "actualOutcome": "NO",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.0025502500000000004,
+    "ensembleBrier": 0.06337724005496619
   },
   {
     "timestamp": "2026-09-08T16:36:24.707Z",
@@ -973,7 +979,13 @@
     "divergence": 0.10194031921405822,
     "agreement": "weak",
     "requestId": "13554467",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13554467"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13554467",
+    "resolved": true,
+    "actualOutcome": "NO",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.061503999999999996,
+    "ensembleBrier": 0.12245822701163696
   },
   {
     "timestamp": "2026-09-08T16:37:58.133Z",
@@ -1079,5 +1091,65 @@
     "agreement": "none",
     "requestId": "13556272",
     "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13556272"
+  },
+  {
+    "timestamp": "2026-09-08T17:59:36.007Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-08SEP26-2000/tUSDC#YES",
+    "marketId": "0x0000000000000000000000000000000000000000000000000000000000017233",
+    "asset": "ETH",
+    "dreamdexUp": 0.16599999999999998,
+    "naiveEst": 0.2730112181632251,
+    "llmEst": 0.348,
+    "ensembleEst": 0.3105056090816125,
+    "divergence": 0.14450560908161253,
+    "agreement": "weak",
+    "requestId": "13559881",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13559881"
+  },
+  {
+    "timestamp": "2026-09-08T18:01:57.071Z",
+    "version": "0.1.0",
+    "symbol": "BTC-0-08SEP26-2000/tUSDC#YES",
+    "marketId": "0x0000000000000000000000000000000000000000000000000000000000017232",
+    "asset": "BTC",
+    "dreamdexUp": 0.1105,
+    "naiveEst": 0.1810528197955757,
+    "llmEst": 0.3,
+    "ensembleEst": 0.24052640989778784,
+    "divergence": 0.13002640989778785,
+    "agreement": "weak",
+    "requestId": "13560046",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13560046"
+  },
+  {
+    "timestamp": "2026-09-08T18:04:36.010Z",
+    "version": "0.1.0",
+    "symbol": "BTC-0-09SEP26/tUSDC#YES",
+    "marketId": "0x00000000000000000000000000000000000000000000000000000000000166eb",
+    "asset": "BTC",
+    "dreamdexUp": 0.10500000000000001,
+    "naiveEst": 0.19582484383933974,
+    "llmEst": 0.25,
+    "ensembleEst": 0.22291242191966987,
+    "divergence": 0.11791242191966986,
+    "agreement": "none",
+    "requestId": "13560214",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13560214"
+  },
+  {
+    "timestamp": "2026-09-08T18:06:44.060Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-09SEP26/tUSDC#YES",
+    "marketId": "0x00000000000000000000000000000000000000000000000000000000000166ec",
+    "asset": "ETH",
+    "dreamdexUp": 0.5675,
+    "naiveEst": 0.5400363331174352,
+    "llmEst": 0.52,
+    "ensembleEst": 0.5300181665587176,
+    "divergence": -0.03748183344128242,
+    "agreement": "none",
+    "requestId": "13560363",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13560363"
   }
 ]
