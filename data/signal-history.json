@@ -818,5 +818,50 @@
     "agreement": "none",
     "requestId": "13533527",
     "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13533527"
+  },
+  {
+    "timestamp": "2026-09-08T11:38:19.679Z",
+    "version": "0.1.0",
+    "symbol": "BTC-0-08SEP26-1200-6EA0/tUSDC#YES",
+    "marketId": "0x0000000000000000000000000000000000000000000000000000000000016ea0",
+    "asset": "BTC",
+    "dreamdexUp": 0.14850000000000002,
+    "naiveEst": 0.2842554892869461,
+    "llmEst": 0.44,
+    "ensembleEst": 0.3621277446434731,
+    "divergence": 0.21362774464347306,
+    "agreement": "weak",
+    "requestId": "13535438",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13535438"
+  },
+  {
+    "timestamp": "2026-09-08T11:39:33.694Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-08SEP26-1200-6EA1/tUSDC#YES",
+    "marketId": "0x0000000000000000000000000000000000000000000000000000000000016ea1",
+    "asset": "ETH",
+    "dreamdexUp": 0.0565,
+    "naiveEst": 0.23405791310421958,
+    "llmEst": 0.386,
+    "ensembleEst": 0.3100289565521098,
+    "divergence": 0.25352895655210983,
+    "agreement": "strong",
+    "requestId": "13535515",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13535515"
+  },
+  {
+    "timestamp": "2026-09-08T11:41:26.042Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-09SEP26/tUSDC#YES",
+    "marketId": "0x00000000000000000000000000000000000000000000000000000000000166ec",
+    "asset": "ETH",
+    "dreamdexUp": 0.21450000000000002,
+    "naiveEst": 0.350465333630116,
+    "llmEst": 0.36,
+    "ensembleEst": 0.355232666815058,
+    "divergence": 0.14073266681505797,
+    "agreement": "none",
+    "requestId": "13535643",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13535643"
   }
 ]
