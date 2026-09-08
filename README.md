@@ -1,5 +1,6 @@
 # EdgeScope
 [![Watch Demo Video](https://img.shields.io/badge/Demo%20Video-YouTube-red?logo=youtube)](https://youtu.be/r1ZgjKMuYm8)
+
 **On-chain mispricing and signal intelligence for DreamDEX Event Contracts, powered by Somnia Agents.**
 
 **Live report:** https://os6863.github.io/event-contracts/
