@@ -517,6 +517,7 @@ async function scanLiveMarkets(exchange: InstanceType<typeof SomniaMarkets>): Pr
   for (const m of unifiedMarkets) {
     if (!m.active) continue;
     if (!isBinaryMarket(m.info)) continue;
+    if (!(m.info.asset in ASSET_SELECTORS)) continue; // no price source for this asset (e.g. an agent-NAV market like BOTNAV) — would only ever render an all-n/a card
     if (VENUE_ID && m.info.venueId?.toLowerCase() !== VENUE_ID.toLowerCase()) continue;
 
     const onchain = await exchange.client.getMarketOnchain(m.info.marketId);

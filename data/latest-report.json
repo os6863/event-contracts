@@ -1,5 +1,6 @@
 {
   "version": "0.1.0",
+<<<<<<< HEAD
   "generatedAt": "2026-09-08T11:33:10.488Z",
   "rows": [
     {
@@ -23,12 +24,38 @@
       "reasoningTruncated": false,
       "expiresAt": "2026-09-08T12:00:00.000Z",
       "priceObservedAt": "2026-09-08T11:27:12.990Z",
+=======
+  "generatedAt": "2026-09-08T11:08:47.289Z",
+  "rows": [
+    {
+      "symbol": "ETH-0-08SEP26-1200/tUSDC#YES",
+      "marketId": "0x0000000000000000000000000000000000000000000000000000000000016c83",
+      "question": "ETH closes at or above its opening price",
+      "asset": "ETH",
+      "oracleQuestionId": "51879",
+      "openingPrice": 2478.87,
+      "currentPrice": 2479.19,
+      "movePct": 0.01290910777895427,
+      "dreamdexUp": 0.47650000000000003,
+      "naiveEst": 0.5117666834003456,
+      "llmEst": 0.501,
+      "ensembleEst": 0.5063833417001729,
+      "llmStatus": "ok",
+      "divergence": 0.029883341700172816,
+      "flagged": false,
+      "agreement": "none",
+      "thinking": "Okay, let's tackle this problem step by step. So, the user wants me to estimate the probability that ETH closes at or above its opening price. The current price is $2479.19, and the opening price was $2478.87. The price change since opening is +0.01%, and there's 54.7 minutes left until the window closes. \n\nFirst, I need to recall the calibration anchors provided. The anchors are for different percentage moves and their corresponding probabilities. For example, a 0.00% move is around 5000, which makes sense because it's a 50-50 chance. Then, as the move increases, the probability goes up. For a +0.25% move, it's 6000-6500, and so on. Similarly, negative moves have lower probabilities.\n\nBut here, the current price is only +0.01% from the opening. That's a very small positive move. However, the time remaining is 54.7 minutes. The user mentioned that more time left means more room for the price to reverse, so the estimate should be pulled closer to 5000. Conversely, if there was very little time left, the probability would be closer to the anchor or even beyond.\n\nSo, the first thing is to determine how much time is left. 54.7 minutes is almost an hour. That's a decent amount of time for the price to fluctuate. Even though the current move is +0.01%, the market could reverse before closing. \n\nBut the calibration anchors are for specific percentage moves. The current move is +0.01%, which is much smaller than the +0.25% anchor. However, since the time remaining is significant, we need to adjust the probability towards 5000. \n\nThe anchors for positive moves start at +0.25% with 6000-6500. Since the current move is +0.01%, which is less than +0.25%, but the time is longer, maybe we need to interpolate between 0.00% (5000) and +0.25% (6000-6500), but adjust for the time. \n\nBut how to adjust for time? The user says that more time left means pulling the estimate closer to 5000. So, even though the current move is +0.01%, which would be slightly above 5000, the time remaining might reduce that probability. \n\nWait, but the anchors are for the move over the window. The current move is +0.01%, but the question is about the closing price. So maybe the current move is a small positive, but with time left, there's a chance it could go up more or drop back. \n\nBut the problem is to estimate the probability that it closes at or above the opening. So, if the current price is slightly above, but there's time left, the probability isn't 100% because it could drop. But how much?\n\nThe anchors are for the move over the window. For example, a +0.25% move would have a higher probability. But here, the current move is +0.01%, which is much smaller. However, the time remaining is 54.7 minutes. Since the time is longer, the probability should be closer to 5000. \n\nBut how to interpolate? Let's think. The 0.00% move is 5000. The +0.25% is 6000-6500. But the current move is +0.01%, which is 0.01% / 0.25% = 4% of the way from 0.00% to +0.25%. If there was no time remaining, maybe we'd interpolate between 5000 and 6500. But since there's time left, we need to adjust.\n\nBut the user says that more time left pulls the estimate closer to 5000. So, if the time remaining is significant, even if the current move is positive, the probability would be less than the anchor for that move. \n\nBut how to quantify this? Maybe we can consider the time as a factor. For example, if the time remaining is 54.7 minutes, which is about an hour. Let's say the anchors are for a certain time frame, but here the time is longer. However, the user didn't specify how time affects the probability beyond the anchors. \n\nAlternatively, maybe the time is a factor in how much the price can move. Since there's more time, the probability is adjusted towards 5000. So, even though the current move is +0.01%, which would be a small positive, the time remaining makes the probability closer to 5000. \n\nBut how much closer? If the current move is +0.01%, which is very close to 0.00%, but the time is long. So, maybe the probability is slightly above 5000, but adjusted down due to time. \n\nBut the problem is that the anchors are for the move over the window, not the current move. So maybe the current move is +0.01%, but the question is about the closing. So, if the time is long, the probability is closer to 5000. \n\nAlternatively, maybe the current move is +0.01%, which is a small positive, so the probability is slightly above 5000, but since there's time left, we need to adjust it down. \n\nBut how to estimate that? Let's think of the anchors. For 0.00% move, it's 5000. For +0.25%, it's 6000-6500. So, the probability increases with the move. But if the move is +0.01%, which is very small, and the time is long, maybe the probability is 5000 plus a small amount, but adjusted down due to time. \n\nBut the user says to interpolate between the anchors, not just default to 5000. So, even though the move is small, we need to interpolate between 0.00% and the next anchor. \n\nBut the current move is +0.01%, which is 0.01% / 0.25% = 4% of the way from 0.00% to +0.25%. So, if there was no time left, the probability would be 5000 + (6500 - 5000) * 0.04 = 5000 + 60 = 5060? Wait, but the anchors for +0.25% are 6000-6500. So maybe the average is around 6250. So, 5000 + (6250 - 5000) * 0.04 = 5000 + 50 = 5050. But that's if the time is zero. But since there's time left, we need to adjust it towards 5000. \n\nBut how much? The user says \"adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000\". So, if the time is long, the estimate is pulled closer to 5000. \n\nBut how to quantify the adjustment? The problem is that the user hasn't provided specific time-based adjustments. So, maybe we need to use the time as a factor. For example, if the time remaining is 54.7 minutes, which is about an hour. If the time was very short, say 1 minute, then the probability would be closer to the anchor. But with 54.7 minutes, it's a longer time. \n\nBut without specific time-based scaling factors, this is tricky. However, the user says to use the anchors as reference points and interpolate between them. So, maybe the time is a factor in how much we adjust the anchor. \n\nAlternatively, since the current move is +0.01%, which is very close to 0.00%, and the time is long, maybe the probability is slightly above 5000, but adjusted down due to time. However, the user says that negative moves must be below 5000, but this is a positive move. \n\nBut how to balance the small positive move with the time? Maybe the probability is around 5000 + (some small amount). For example, if the move was +0.25%, and time was zero, it's 6500. But with time, it's lower. But since the move is +0.01%, which is much smaller, and time is long, maybe the probability is around 5000 + (some small value). \n\nAlternatively, maybe the time is considered as a factor that reduces the probability. For example, even if the current move is +0.01%, with time left, the probability is 5000 minus some amount. But that doesn't make sense because the current move is positive. \n\nWait, but the question is about closing at or above the opening. So, if the current price is slightly above, but there's time left, the probability is not 100%, but how much? \n\nMaybe we can think of it as a Brownian motion or random walk. But without specific volatility data, we can't compute that. So, we have to rely on the anchors. \n\nGiven that the current move is +0.01%, which is very close to 0.00%, and the time is long, the probability should be slightly above 5000 but adjusted down due to the time. However, since the move is positive, it's still above 5000. \n\nBut how to interpolate between 0.00% (5000) and the next anchor. Let's say the next anchor is +0.25% (6000-6500). The current move is 0.01%, which is 0.01/0.25 = 0.04 of the way. So, if there was no time left, the probability would be 5000 + 0.04*(6500-5000) = 5000 + 60 = 5060. But with time left, we need to adjust it towards 5000. \n\nBut how much? The user says \"pull your estimate closer to 5000\". If the time is long, maybe we reduce the probability by some percentage. But without specific rules, it's hard. Maybe the time is a factor in how much we adjust. For example, if the time is 54.7 minutes, which is about an hour, maybe we reduce the probability by a certain amount. \n\nAlternatively, maybe the time is considered as a factor that makes the probability closer to 5000. Since the current move is +0.01%, which is 0.01%, and the time is long, maybe the probability is around 5000 + (some fraction). But since the move is very small, and time is long, maybe the probability is around 5000 + 10 = 5010? But that's a guess. \n\nAlternatively, since the move is +0.01%, which is 0.01% of the opening price. The opening price is $2478.87, so 0.01% is about $0.25. The current price is $2479.19, which is $0.32 above the opening. So, the move is +0.013% (approx). \n\nBut the anchors are for larger moves. So, the current move is much smaller than the anchors. So, the probability should be slightly above 5000, but adjusted for time. \n\nSince the time is 54.7 minutes, which is a significant amount, the probability is pulled closer to 5000. So, maybe the probability is around 5000 + 10 = 5010. But I need to make sure it's not too high. \n\nAlternatively, since the move is +0.01%, which is very small, and the time is long, maybe the probability is around 5000 + (0.01% / 0.25%) * (6500 - 5000) * (some time factor). But without knowing the time factor, it's hard. \n\nAlternatively, maybe the time is not directly affecting the anchor, but the user is saying that when the time is longer, you should pull the estimate closer to 5000. So, if the move was +0.25% and time was long, you'd have a lower probability than the anchor. But here, the move is +0.01%, so even with time, it's still a small positive move. \n\nBut since the move is so small, maybe the probability is just a bit above 5000. For example, 5000 + 10 = 5010. But I need to make sure that the answer is between 0 and 10000, and that it's an integer. \n\nAlternatively, maybe the answer is 5000, but the user says not to default to 5000 when the move is nonzero. So, even though the move is very small, we should adjust it slightly up. \n\nBut how much? If the move is +0.01%, which is 0.01% of the price. The anchors for 0.00% is 5000, and for +0.25% is 6000-6500. So, the difference between 0.00% and +0.25% is 0.25%, and the probability difference is 1500 (from 5000 to 6500). \n\nSo, per 0.25% move, the probability increases by 1500. Therefore, per 0.01% move, the increase would be (1500 / 0.25) * 0.01 = 60. So, 5000 + 60 = 5060. But this is without considering time. \n\nNow, considering time, which is 54.7 minutes. The user says that more time left means pulling the estimate closer to 5000. So, if the time was zero, it would be 5060. But with time, we need to adjust. \n\nBut how much? If the time is 54.7 minutes, which is a long time, maybe we reduce the probability by a certain percentage. For example, if the time is 50% of the window, maybe reduce by 50% of the adjustment. But without specific rules, it's hard. \n\nAlternatively, since the time is long, the probability is closer to 5000. So, maybe the adjustment is significant. For instance, if the time is long, the probability could be 5000 + (some fraction of 60). \n\nBut without a specific formula, this is guesswork. However, given that the move is so small and the time is long, maybe the probability is around 5000 + 10 = 5010. But I'm not sure. \n\nAlternatively, maybe the time is considered as a factor that reduces the probability. For example, if the time was 100% (i.e., infinite time), the probability would be 5000. But since there's finite time, it's slightly higher. \n\nBut how to quantify this? If the time is 54.7 minutes, which is a short window for a volatile asset. Wait, but the user says that a short window leaves room for the price to move further or reverse. Wait, the user says: \"a short window leaves real room for the price to move further or reverse before closing.\" So, if the time is short, the probability is adjusted more towards the anchor. But here, the time is 54.7 minutes, which is not very short. Maybe it's considered a moderate time. \n\nBut the user says \"adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it\". So, since there's more time (54.7 minutes), the estimate is pulled closer to 5000. \n\nSo, if the original estimate without time adjustment was 5060 (from the 0.01% move), then with time adjustment, it's pulled closer to 5000. How much? Maybe by a certain percentage. \n\nBut again, without specific rules, this is challenging. However, since the move is so small, and the time is long, maybe the probability is just slightly above 5000, like 5010. \n\nAlternatively, maybe the time is not affecting the anchor directly, but the user is saying that for the same move, more time means lower probability. So, for example, if the move was +0.25% and time was long, the probability would be less than 6500. But here, the move is +0.01%, which is very small, and time is long. \n\nSo, maybe the probability is 5000 + (some small value). Given that the move is +0.01%, which is 0.01% of the price, and the time is long, the probability is just slightly above 5000. \n\nBut the user says to interpolate between the anchors, not default to 5000. So, even if the move is very small, we need to adjust it. \n\nLet me think of another approach. The calibration anchors are for the move over the window. The current move is +0.01%, but the window is still open. The question is about the closing price. \n\nIf the time was zero, the probability would be 5000 (since the price is at +0.01%, but it's exactly at the opening price? Wait, no. The current price is above the opening price, so if the window is closing now, the probability would be 100% (since it's already at or above). But in this case, the window is not closed yet. \n\nWait, the current price is $2479.19, and the opening price is $2478.87. So, the price has already moved up by +0.01% (approx). But the window is still open for 54.7 minutes. So, the question is, will it close at or above the opening price. \n\nSo, the current price is above, but there's time for it to drop. The probability is not 100%, but how much? \n\nGiven the volatility of ETH, and the time left, it's possible that the price could reverse. \n\nBut using the anchors, since the move is +0.01%, which is less than +0.25%, and the time is long, the probability is between 5000 and 6000. \n\nBut how to find the exact number. \n\nMaybe the 0.01% move is 0.01% of the price. Let's calculate the exact percentage. \n\nOpening price: $2478.87\nCurrent price: $2479.19\nDifference: $2479.19 - $2478.87 = $0.32\nPercentage move: (0.32 / 2478.87) * 100 ≈ 0.0129% (approx 0.013%)\n\nSo, it's approximately +0.013%. \n\nNow, the anchors for positive moves start at +0.25%. So, this is much smaller. \n\nThe user says to interpolate between the anchors. So, between 0.00% (5000) and +0.25% (6000-6500). \n\nThe percentage move is 0.013%, which is 0.013/0.25 = 0.052 of the way from 0.00% to +0.25%. \n\nAssuming the anchor for +0.25% is 6250 (midpoint between 6000 and 6500), the probability without time adjustment would be 5000 + 0.052*(6250 - 5000) = 5000 + 0.052*1250 ≈ 5000 + 65 = 5065. \n\nBut since there's time left (54.7 minutes), we need to adjust this towards 5000. \n\nHow much? The user says \"more time left means more room to reverse, so pull your estimate closer to 5000\". So, if the time was zero, it's 5065. With time, it's less. \n\nBut how much? If we assume that the time adjustment is proportional to the time remaining. But without a specific formula, it's hard. \n\nAlternatively, since the time is 54.7 minutes, which is about 55 minutes. Let's say the window is 55 minutes. If the window was 1 minute, the probability would be closer to the anchor. But with 55 minutes, it's a longer time. \n\nBut how to quantify this? Maybe the adjustment is based on the time remaining as a fraction of some standard time. However, the user hasn't provided that. \n\nAlternatively, think of it as the time remaining affecting the volatility. For example, the standard deviation of price changes increases with the square root of time. But without knowing the volatility, this is not helpful. \n\nAlternatively, since the user says that for a short window, the probability is adjusted towards the anchor, but for a long window, it's pulled towards 5000. \n\nIn this case, the window is 54.7 minutes, which is not extremely short. Maybe it's considered a moderate time. So, the adjustment might be moderate. \n\nIf we assume that the adjustment reduces the probability by 50% of the original adjustment, then 5065 - (5065 - 5000) * 0.5 = 5065 - 32.5 = 5032.5 → 5033. \n\nBut this is arbitrary. \n\nAlternatively, since the time is long, maybe the probability is 5000 + 10 = 5010. \n\nBut without specific rules, it's hard to know. However, given that the move is very small and the time is long, the probability should be just slightly above 5000. \n\nBut the user says not to default to 5000 when the move is nonzero. So, even a small move should have a probability slightly above 5000. \n\nSo, maybe the answer is 5010 or 5020. \n\nBut I need to make a best guess. Given that the move is +0.013%, which is 0.013/0.25 = 5.2% of the way to +0.25%, and the time is long, pulling it closer to 5000. \n\nIf the original estimate was 5065, and we pull it closer to 5000, maybe by 20%, so 5065 - (5065-5000)*0.2 = 5065 - 13 = 5052. \n\nBut this is all guesswork. \n\nAlternatively, since the move is so small, and the time is long, maybe the probability is 5000 + (some small number). Let's say 5000 + 5 = 5005. \n\nBut the user might expect a more precise answer. \n\nAlternatively, think of the 0.01% move as being very close to 0.00%, so the probability is 5000, but since the move is positive, it's slightly higher. Maybe 5005. \n\nBut again, this is a guess. \n\nGiven the uncertainty, but following the instruction to interpolate between the anchors and adjust for time, I'll go with a value slightly above 5000. Let's say 5010. But I'm not entirely sure. However, given the small move and long time, 5010 seems reasonable.",
+      "reasoningTruncated": false,
+      "expiresAt": "2026-09-08T12:00:00.000Z",
+      "priceObservedAt": "2026-09-08T11:05:16.390Z",
+>>>>>>> d612f376623879a74c76b8a760961b7d73c19138
       "priceSources": [
         "CoinGecko",
         "Binance",
         "Coinbase"
       ],
       "priceSourceQuality": "verified-multi-source",
+<<<<<<< HEAD
       "bestBid": 0.143,
       "bestAsk": 0.167,
       "liquidityState": "ok",
@@ -163,12 +190,83 @@
       "reasoningTruncated": false,
       "expiresAt": "2026-09-09T00:00:00.000Z",
       "priceObservedAt": "2026-09-08T11:31:43.606Z",
+=======
+      "bestBid": 0.462,
+      "bestAsk": 0.491,
+      "liquidityState": "ok",
+      "spread": 0.02899999999999997,
+      "observedAt": "2026-09-08T11:05:16.772Z",
+      "minutesLeft": 54.72046666666667,
+      "realizedVolAnnual": 0.42888807180865957,
+      "requestId": "13533348",
+      "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13533348"
+    },
+    {
+      "symbol": "BTC-0-08SEP26-1200/tUSDC#YES",
+      "marketId": "0x0000000000000000000000000000000000000000000000000000000000016c82",
+      "question": "BTC closes at or above its opening price",
+      "asset": "BTC",
+      "oracleQuestionId": "51878",
+      "openingPrice": 78460.84,
+      "currentPrice": 78420.7,
+      "movePct": -0.051159278947305965,
+      "dreamdexUp": 0.35550000000000004,
+      "naiveEst": 0.43960320548689397,
+      "llmEst": 0.48,
+      "ensembleEst": 0.45980160274344695,
+      "llmStatus": "ok",
+      "divergence": 0.10430160274344691,
+      "flagged": false,
+      "agreement": "none",
+      "thinking": "Okay, let's try to figure out this probability. The user wants to know the chance that BTC closes at or above its opening price of $78,460.84, given that the current price is $78,420.70, which is a -0.05% move. There's 53.2 minutes left until the window closes.\n\nFirst, I need to recall the calibration anchors provided. The anchors are for different percentage moves and their corresponding probabilities. The key here is that the current move is -0.05%, which is a small negative change. But the time remaining is 53.2 minutes. The instructions mention that more time left means more room to reverse, so the estimate should be closer to 5000. However, since the current move is negative, the probability should be below 5000.\n\nLooking at the anchors, for a -0.25% move, the probability is between 3500-4000. But the current move is -0.05%, which is much smaller in magnitude. So maybe we need to interpolate between the 0.00% (5000) and the -0.25% (3500-4000). \n\nSince -0.05% is 20% of the way from 0% to -0.25% (because 0.05 is 1/5 of 0.25). So maybe the probability would be 20% of the way from 5000 to 3500. Let's calculate that. The difference between 5000 and 3500 is 1500. 20% of 1500 is 300. So 5000 - 300 = 4700. But wait, the anchors for -0.25% are 3500-4000. Maybe the lower end is 3500, so perhaps the interpolation is linear. Alternatively, maybe the user expects a different approach.\n\nBut also, the time remaining is 53.2 minutes. The note says that more time left means pull the estimate closer to 5000. Since the current move is -0.05%, which is a small negative, but with some time left, the probability should be adjusted upwards from the anchor. However, the anchor for -0.25% is 3500-4000, but here the move is less negative. So perhaps the base probability is somewhere between 5000 (for 0%) and the -0.25% anchor. \n\nBut since the move is -0.05%, which is closer to 0% than to -0.25%, maybe the base probability is closer to 5000. Let's think: if 0% is 5000, and -0.25% is 3500-4000. Let's take the midpoint of the -0.25% range as 3750. So from 0% (5000) to -0.25% (3750), the difference is 1250 over 0.25% move. So per 0.05% move, the decrease would be (1250 / 0.25) * 0.05 = 250. So 5000 - 250 = 4750. But since the time remaining is 53.2 minutes, which is more than a short window, we need to adjust the estimate closer to 5000. How much?\n\nThe original anchors are for a short window. The user says to adjust for time remaining: more time left means more room to reverse, so pull closer to 5000. So if the base probability (without considering time) is 4750, but with 53.2 minutes left, which is a bit more time, so maybe we adjust it towards 5000. How much? Maybe the adjustment depends on the time. But the problem is that the original anchors don't specify time, so perhaps we need to assume that the given anchors are for a certain time frame, and with more time, the probability should be adjusted. However, without specific time-based factors, it's a bit tricky.\n\nAlternatively, maybe the time adjustment is already factored into the anchors. But the user says to adjust for time remaining. So if the time is longer, the probability should be closer to 5000. For example, if the time was very short, you might have a lower probability (closer to the anchor), but with more time, you have more chance to reverse. \n\nBut since the current move is -0.05%, which is a small negative, and with 53 minutes left, which is a moderate time, perhaps we take the base estimate (from the anchor) and adjust it towards 5000. Let's say the base estimate without time adjustment is 4750. Then, considering the time, maybe we move it up. How much? If the time is 53 minutes, which is about an hour, maybe the adjustment is not too much. Let's say 5% of the distance from 4750 to 5000. 5% of 250 is 12.5, so 4750 + 12.5 = 4762.5, which would round to 4763. But this is speculative.\n\nAlternatively, maybe the time adjustment is more significant. For example, if the time is 53 minutes, which is a bit over an hour, maybe the probability is pulled closer to 5000. Suppose the original estimate without time is 4750, and with time, it's 4900. But this is arbitrary. \n\nAlternatively, since the move is -0.05%, which is very close to 0%, maybe the probability is slightly below 5000. For example, 4900. But given that the move is negative, even if small, the probability should be below 5000. \n\nBut the anchors for -0.25% are 3500-4000. So for -0.05%, which is a smaller move, the probability should be higher than that. So maybe 4500? But how to interpolate. Let's think of the -0.25% as 3500-4000. Let's take 3750 as a midpoint. Then, the difference between 0% (5000) and -0.25% (3750) is 1250 over 0.25% move. So per 0.05% move, it's 1250 / 5 = 250. So for -0.05%, the base probability is 5000 - 250 = 4750. Then, considering the time remaining, which is 53 minutes. If the original anchors are for a shorter time, say, 15 minutes, then with 53 minutes, the probability would be adjusted upwards. But without specific time factors, maybe we just take the base estimate of 4750. However, the user says to adjust for time. So perhaps we need to adjust it towards 5000. \n\nIf we assume that with more time, the probability increases by a certain amount. For example, if the time is 53 minutes, which is about 3.5 times longer than a 15-minute window (assuming the original anchors are for 15 minutes). But this is guesswork. Alternatively, since the user says \"more time left means more room to reverse, so pull your estimate closer to 5000\", so for the same move, with more time, the probability is higher. So if the base estimate is 4750, and with more time, we might adjust it to, say, 4800 or 4850. \n\nBut without a specific formula, it's challenging. Maybe the user expects a simple interpolation between the 0% and the -0.25% anchor, adjusted for time. Since the move is -0.05%, which is 20% of the way from 0% to -0.25%, the base probability would be 5000 - (20% of 1250) = 5000 - 250 = 4750. Then, considering the time, which is 53 minutes. If the original anchors are for a shorter time, say, 15 minutes, then 53 minutes is longer, so the probability is pulled towards 5000. Let's say we adjust by 10% of the distance from 4750 to 5000. That would be 250 * 0.1 = 25, so 4750 +25= 4775. Rounding to the nearest 50 or 100? Maybe 4775 is acceptable, but the answer needs to be an integer. \n\nAlternatively, maybe the time adjustment is not as significant. Since the move is very small (-0.05%), and the time is 53 minutes, which is a bit over an hour. The market might have enough time to reverse, but the current move is minimal. So the probability might be around 4800. But I'm not sure. \n\nAlternatively, maybe the user expects that since the move is -0.05%, which is very close to 0%, and with some time left, the probability is slightly below 5000. Maybe around 4900. But how to justify that. \n\nWait, the anchors for -0.25% are 3500-4000. So for -0.05%, which is 1/5 of -0.25%, the probability would be 5000 - (1/5)*(5000-3750) = 5000 - (1/5)*1250 = 5000 - 250 = 4750. But then adjust for time. If the time is longer, say, 53 minutes, which is more than the original time frame (assuming the original anchors are for a shorter time), then we adjust towards 5000. Let's say we adjust by 20% of the difference between 4750 and 5000. That would be 250 * 0.2 = 50, so 4750 +50=4800. \n\nSo the final answer would be 4800. But I'm not entirely sure. Alternatively, maybe the time adjustment is not as significant, and the answer is 4750. However, the user said to adjust for time. So maybe 4800 is better. \n\nAnother approach: The current move is -0.05%, which is a very small negative. The time is 53 minutes. The market has time to reverse. So the probability is not too low. If the move was -0.25%, it's 3500-4000, but here it's much smaller. So maybe the probability is around 4500-4700. But with time, maybe 4700. \n\nBut without a clear formula, it's hard. Given that the move is -0.05%, which is 0.05% below the opening price, and with 53 minutes, I think the best estimate is around 4750-4800. Since the user wants an integer, maybe 4750 or 4800. \n\nAlternatively, looking at the anchor for -0.25% is 3500-4000. The midpoint is 3750. The move here is -0.05%, which is 1/5 of -0.25%. So the probability would be 5000 - (1/5)*(5000 - 3750) = 5000 - 250 = 4750. Then, since there's 53 minutes left, which is more time, we adjust towards 5000. Let's say we add 10% of the difference between 4750 and 5000, which is 25. So 4750 +25 = 4775. Rounded to 4775. But the answer must be an integer. However, maybe the adjustment is more significant. If I think that with more time, the probability increases by 50, making it 4800. \n\nGiven the uncertainty, I think 4750 is a safe base, but with time adjustment, maybe 4800. But I'm not certain. Alternatively, since the move is very small, maybe the probability is closer to 5000. But the current price is below the opening, so the probability should be less than 5000. \n\nAnother angle: The price is -0.05% from the opening. Let's calculate how much that is in dollars. The opening price is $78,460.84. A -0.05% move is 78,460.84 * 0.0005 = $39.23. So the current price is $78,460.84 - $39.23 = $78,421.61, which is close to the given $78,420.70. So the price is just slightly below the opening. \n\nWith 53 minutes left, which is a bit over an hour, the market could reverse. But BTC is volatile. However, the question is about closing at or above the opening. Since the move is so small, the probability might be around 4800-4900. But given the anchors, maybe 4750. \n\nBut the user said to interpolate between the anchors. So for -0.05%, which is between 0.00% and -0.25%, the probability should be between 5000 and 3500-4000. So maybe 4500? But that seems too low. Wait, the anchor for -0.25% is 3500-4000. So the lower end is 3500, upper is 4000. So if we take the midpoint of that range as 3750, then the interpolation between 0% (5000) and -0.25% (3750) for a -0.05% move would be 5000 - (0.05/0.25)*(5000-3750) = 5000 - (0.2)*(1250) = 5000 - 250 = 4750. So that's the base. Then adjust for time. \n\nIf the time is 53 minutes, which is longer than the original time frame (assuming the anchors are for a shorter time), then we adjust towards 5000. How much? Maybe 10% of the difference. So 4750 + (5000-4750)*0.1 = 4750 + 25 = 4775. But the answer needs to be an integer. So 4775. However, maybe the adjustment is more. If the time is significantly longer, maybe 20%, leading to 4750 + 50 = 4800. \n\nBut without specific time factors, it's hard. The user says to adjust for time, but no formula is given. So maybe the answer is 4750. But I think the time adjustment is important here. Since the move is small and time is sufficient, the probability should be closer to 5000. So maybe 4800. \n\nAlternatively, think of the time remaining as a factor. For example, if the time was 0, the probability would be the anchor. But with time, it's adjusted. However, without knowing the original time frame of the anchors, it's hard. \n\nIn the absence of specific time factors, I'll go with the interpolated value of 4750, and assume that the time adjustment is already considered in the anchors. But the user explicitly says to adjust for time. So I need to adjust. \n\nLet me think of it as follows: The base probability is 4750. The time remaining is 53 minutes. If the original time was, say, 15 minutes, then with 53 minutes, the probability increases. Let's assume that the time factor is proportional. For example, if the original time was T, and now it's 53 minutes, the adjustment factor could be something like (53 / T). But since I don't know T, this is guesswork. \n\nAlternatively, the user might expect that with more time, the probability is pulled towards 5000, but not too much. So maybe 4800. \n\nAfter considering all this, I think the most reasonable estimate is 4800.",
+      "reasoningTruncated": false,
+      "expiresAt": "2026-09-08T12:00:00.000Z",
+      "priceObservedAt": "2026-09-08T11:06:47.504Z",
       "priceSources": [
         "CoinGecko",
         "Binance",
         "Coinbase"
       ],
       "priceSourceQuality": "verified-multi-source",
+      "bestBid": 0.341,
+      "bestAsk": 0.37,
+      "liquidityState": "ok",
+      "spread": 0.02899999999999997,
+      "observedAt": "2026-09-08T11:06:47.883Z",
+      "minutesLeft": 53.20195,
+      "realizedVolAnnual": 0.3345918810313333,
+      "requestId": "13533446",
+      "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13533446"
+    },
+    {
+      "symbol": "ETH-0-09SEP26/tUSDC#YES",
+      "marketId": "0x00000000000000000000000000000000000000000000000000000000000166ec",
+      "question": "ETH closes at or above its opening price",
+      "asset": "ETH",
+      "oracleQuestionId": "51658",
+      "openingPrice": 2489.95,
+      "currentPrice": 2477.27,
+      "movePct": -0.5092471736380183,
+      "dreamdexUp": 0.27449999999999997,
+      "naiveEst": 0.3783570008192987,
+      "llmEst": 0.28,
+      "ensembleEst": 0.32917850040964935,
+      "llmStatus": "ok",
+      "divergence": 0.05467850040964939,
+      "flagged": false,
+      "agreement": "none",
+      "thinking": "Okay, let's tackle this problem step by step. The user wants the probability that ETH closes at or above its opening price of $2489.95, given the current price is $2477.27, which is a -0.51% move. The time remaining is 772.1 minutes.\n\nFirst, I need to recall the calibration anchors provided. For a -0.50% move, the probability is between 2200-3000. Since the current move is -0.51%, which is slightly more than -0.50%, the probability should be a bit lower than the anchor. But the anchors are approximate, so maybe around 2200-3000. However, the time remaining is 772 minutes, which is over 12 hours. The note says more time left means more room to reverse, so the estimate should be pulled closer to 5000. But since the move is negative, it must stay below 5000.\n\nSo, the base anchor for -0.50% is 2200-3000. But with 772 minutes left, which is a significant time, the probability should be adjusted upwards from the anchor. How much? The original anchors might assume a certain time frame, but since the user says to adjust for time remaining. The problem is that the anchors don't specify time, but the instruction says to adjust based on time. For example, if there's more time, the probability should be closer to 5000. So, if the move is -0.50%, the base is 2200-3000. But with more time, we need to increase the probability (since there's more chance to reverse). \n\nBut how to quantify that? Let's think. Suppose the original anchor for -0.50% is 2600 (midpoint of 2200-3000). Then, with more time, we move towards 5000. How much? Maybe a linear interpolation between the anchor and 5000 based on time? But the problem is that the user didn't give specific time adjustments, just general guidance. The note says \"adjust for time remaining — more time left means more room to reverse, so pull your estimate closer to 5000; very little time left means less room to reverse, so lean closer to the anchor or beyond it.\"\n\nSo, for a -0.51% move, which is slightly worse than -0.50%, and with 772 minutes left. Let's assume that the base probability is around 2500 (midpoint of 2200-3000). But with more time, we need to adjust upwards. How much? Let's think about the original anchors. For example, if the time was very short, say 0 minutes, the probability would be closer to the anchor. But with 772 minutes, which is a long time, we need to pull it closer to 5000. But how much?\n\nMaybe the adjustment is proportional. For instance, if the time remaining is 772 minutes, which is a long time, maybe the probability is halfway between the anchor and 5000? But that's arbitrary. Alternatively, maybe the time adjustment is a factor. However, without specific data, I need to use the given anchors and the instruction.\n\nAlternatively, think of it as the probability being between the anchor and 5000. For example, if the time is long, the probability is higher than the anchor. Since the move is -0.51%, which is slightly worse than -0.50%, so the base is 2200-3000. Let's take 2500 as a base. Then, with 772 minutes left, which is a lot, so we adjust towards 5000. Let's say we take the midpoint between 2500 and 5000, which is 3750. But that might be too high. Alternatively, maybe a smaller adjustment. For example, if the time is long, maybe the probability is 2500 + (5000 - 2500) * (some factor). But without specific rules, it's hard. \n\nAlternatively, think of the time remaining as a factor. If the time is 772 minutes, which is over 12 hours. Maybe the market has enough time to reverse. So, the probability is higher than the anchor. For example, if the anchor for -0.50% is 2200-3000, and with more time, maybe 2500-3000. But since the move is -0.51%, slightly worse, maybe 2200-2500. But the user says to interpolate between the anchors. Wait, the user said \"interpolate between them, and do not simply default to 5000 whenever the move is nonzero.\" So for a -0.51% move, which is between -0.50% and -1.00%, but since it's closer to -0.50%, maybe take the anchor for -0.50% (say 2600) and adjust for time. \n\nBut how? The problem is that the time adjustment isn't quantified. The user says \"pull your estimate closer to 5000\" for more time. So, if the original anchor is 2600, and with more time, we move towards 5000. Let's assume that the time adjustment is a percentage. For example, if the time is very long, maybe 50% of the way from the anchor to 5000. So 2600 + (5000-2600)*0.5 = 3800. But this is just a guess. Alternatively, maybe the time adjustment is linear. But without specific data, it's hard. \n\nAlternatively, think of the time as a factor. For example, if the time is longer, the probability increases. Let's say that the base probability for -0.50% is 2600. With 772 minutes, which is a long time, maybe the probability is 2600 + (5000 - 2600) * (time factor). But again, without a specific formula, this is speculative. \n\nAlternatively, use the given anchors and adjust based on the time. For example, if the time is 772 minutes, which is a lot, maybe the probability is 2500. But I need to make a judgment call here. Given that the move is -0.51%, which is slightly worse than -0.50%, and the time is long, the probability should be slightly lower than the anchor for -0.50% but adjusted upwards due to time. \n\nWait, the anchor for -0.50% is 2200-3000. Let's take the midpoint as 2600. Then, with more time, we move towards 5000. Let's say the adjustment is 20% towards 5000. So 2600 + (5000-2600)*0.2 = 2600 + 480 = 3080. But this is arbitrary. Alternatively, if the time is long, maybe the probability is 3000. But since the move is -0.51%, which is a bit worse, maybe 2800. \n\nAlternatively, think of the time remaining as a factor that allows for reversal. Since there's a lot of time, the probability is higher than the anchor. For example, if the anchor is 2200-3000, and with time, it's maybe 2500-3000. But the move is -0.51%, so maybe 2500. But I need to pick an integer. \n\nAlternatively, since the move is -0.51%, which is between -0.50% and -1.00%, but closer to -0.50%, so interpolate between the -0.50% anchor (say 2600) and the -1.00% anchor (say 1000). The difference between -0.50% and -1.00% is 0.50%, and the current move is -0.51%, which is 0.01% below -0.50%. So, the fraction is 0.01/0.50 = 0.02. So, the probability would be 2600 - (2600 - 1000)*0.02 = 2600 - 32 = 2568. Then, adjust for time. Since time is long, move towards 5000. Let's say 2568 + (5000 - 2568)*0.2 = 2568 + 486.4 = 3054.4, so around 3054. But this is all guesswork. \n\nAlternatively, maybe the time adjustment is not linear. But given the lack of specific data, I have to make an educated guess. Given that the time is 772 minutes, which is a long time, the probability should be higher than the anchor. Let's say for the -0.50% move with a long time, it's 3000. Since the current move is slightly worse, maybe 2800. But I'm not sure. \n\nAnother approach: The user provided that for -0.50% move, the probability is 2200-3000. Let's take the lower end as 2200 and upper as 3000. The current move is -0.51%, which is 0.01% more negative. So, maybe subtract a bit from the anchor. For example, if the anchor is 2600 (midpoint), then subtract 1% of the range. The range is 800 (from 2200 to 3000). 1% of 800 is 8, so 2600 -8 = 2592. Then adjust for time. If time is long, move towards 5000. Let's say 2592 + (5000 -2592)*0.2 = 2592 + 481.6 = 3073.6 ≈ 3074. \n\nBut this is all very speculative. Given that the user says to respond with an integer, and considering that the move is -0.51%, slightly worse than -0.50%, and time is long, I'll go with a value between 2500-3000. Maybe 2800? Or 2700? \n\nAlternatively, think of the time remaining as 772 minutes, which is about 12.87 hours. For a volatile asset like ETH, 12 hours is a long time. So the probability should be higher than the anchor. Let's say the base is 2600, and with time, it's 3000. But since the move is -0.51%, maybe 2800. \n\nBut I need to pick a number. Given the uncertainty, I'll go with 2800 as the estimated probability.",
+      "reasoningTruncated": false,
+      "expiresAt": "2026-09-09T00:00:00.000Z",
+      "priceObservedAt": "2026-09-08T11:07:54.550Z",
+>>>>>>> d612f376623879a74c76b8a760961b7d73c19138
+      "priceSources": [
+        "CoinGecko",
+        "Binance",
+        "Coinbase"
+      ],
+      "priceSourceQuality": "verified-multi-source",
+<<<<<<< HEAD
       "bestBid": 0.254,
       "bestAsk": 0.281,
       "liquidityState": "ok",
@@ -178,6 +276,17 @@
       "realizedVolAnnual": 0.4304233016873539,
       "requestId": "13535031",
       "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13535031"
+=======
+      "bestBid": 0.261,
+      "bestAsk": 0.288,
+      "liquidityState": "ok",
+      "spread": 0.02699999999999997,
+      "observedAt": "2026-09-08T11:07:54.929Z",
+      "minutesLeft": 772.0845166666667,
+      "realizedVolAnnual": 0.42888807180865957,
+      "requestId": "13533527",
+      "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=13533527"
+>>>>>>> d612f376623879a74c76b8a760961b7d73c19138
     },
     {
       "symbol": "BTC-0-09SEP26/tUSDC#YES",
@@ -186,7 +295,11 @@
       "asset": "BTC",
       "oracleQuestionId": "51657",
       "openingPrice": 79117.2,
+<<<<<<< HEAD
       "currentPrice": 78460.945,
+=======
+      "currentPrice": 78406.2,
+>>>>>>> d612f376623879a74c76b8a760961b7d73c19138
       "movePct": null,
       "dreamdexUp": null,
       "naiveEst": null,
@@ -199,7 +312,11 @@
       "thinking": null,
       "reasoningTruncated": false,
       "expiresAt": "2026-09-09T00:00:00.000Z",
+<<<<<<< HEAD
       "priceObservedAt": "2026-09-08T11:33:09.715Z",
+=======
+      "priceObservedAt": "2026-09-08T11:08:46.899Z",
+>>>>>>> d612f376623879a74c76b8a760961b7d73c19138
       "priceSources": [
         "CoinGecko",
         "Binance",
@@ -207,10 +324,75 @@
       ],
       "priceSourceQuality": "verified-multi-source",
       "bestBid": null,
+<<<<<<< HEAD
       "bestAsk": 0.191,
       "liquidityState": "one-sided",
       "spread": null,
       "issue": "Insufficient market liquidity (one sided) — divergence not classified as mispricing."
+=======
+      "bestAsk": 0.125,
+      "liquidityState": "one-sided",
+      "spread": null,
+      "issue": "Insufficient market liquidity (one sided) — divergence not classified as mispricing."
+    },
+    {
+      "symbol": "ETH-0-19OCT26/tUSDC#YES",
+      "marketId": "0x0000000000000000000000000000000000000000000000000000000000013b55",
+      "question": "ETH closes at or above its opening price",
+      "asset": "ETH",
+      "oracleQuestionId": "50817",
+      "openingPrice": null,
+      "currentPrice": 2477.27,
+      "movePct": null,
+      "dreamdexUp": null,
+      "naiveEst": null,
+      "llmEst": null,
+      "ensembleEst": null,
+      "llmStatus": "skipped",
+      "divergence": null,
+      "flagged": false,
+      "agreement": "none",
+      "thinking": null,
+      "reasoningTruncated": false,
+      "expiresAt": "2026-10-19T00:00:00.000Z",
+      "priceObservedAt": "2026-09-08T11:07:54.550Z",
+      "priceSources": [
+        "CoinGecko",
+        "Binance",
+        "Coinbase"
+      ],
+      "priceSourceQuality": "verified-multi-source",
+      "issue": "Opening price ($2,450,580,000) is implausible next to the independent current price ($2,477.27) — likely a units/decimals mismatch from the indexer for this specific market. Skipped rather than computing a fabricated price move."
+    },
+    {
+      "symbol": "BTC-0-19OCT26/tUSDC#YES",
+      "marketId": "0x0000000000000000000000000000000000000000000000000000000000013b54",
+      "question": "BTC closes at or above its opening price",
+      "asset": "BTC",
+      "oracleQuestionId": "50815",
+      "openingPrice": null,
+      "currentPrice": 78406.2,
+      "movePct": null,
+      "dreamdexUp": null,
+      "naiveEst": null,
+      "llmEst": null,
+      "ensembleEst": null,
+      "llmStatus": "skipped",
+      "divergence": null,
+      "flagged": false,
+      "agreement": "none",
+      "thinking": null,
+      "reasoningTruncated": false,
+      "expiresAt": "2026-10-19T00:00:00.000Z",
+      "priceObservedAt": "2026-09-08T11:08:46.899Z",
+      "priceSources": [
+        "CoinGecko",
+        "Binance",
+        "Coinbase"
+      ],
+      "priceSourceQuality": "verified-multi-source",
+      "issue": "Opening price ($79,610,750,000) is implausible next to the independent current price ($78,406.2) — likely a units/decimals mismatch from the indexer for this specific market. Skipped rather than computing a fabricated price move."
+>>>>>>> d612f376623879a74c76b8a760961b7d73c19138
     }
   ]
 }

@@ -13,7 +13,7 @@ name: Refresh report (scheduled)
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    - cron: "7 * * * *" # every hour, offset from :00 to avoid GitHub's on-the-hour scheduling crunch
   workflow_dispatch: {}
 
 permissions:
