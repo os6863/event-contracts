@@ -36,6 +36,7 @@ function oracleExplorerUrl(id: unknown): string | null {
 }
 const eligible = (r: ReportRow) => r.llmStatus === "ok" && prob(r.dreamdexUp) && prob(r.naiveEst) && prob(r.llmEst) && prob(r.ensembleEst) && finite(r.divergence);
 function explanation(r: ReportRow): string {
+  if (r.isOrganizerTestFixture) return "This market is a test fixture created by the hackathon organizers to test DreamDEX's own price-feed infrastructure — it is not part of EdgeScope's live signal data. Kept in the report rather than filtered, since it isn't this project's fixture to remove; the missing data below reflects that, not a failure to analyze a real market.";
   if (r.llmStatus === "expired") return "This market expired during report generation. It is excluded from signal counts and scoring history.";
   if (r.llmStatus === "failed") return "The agent estimate was unavailable or failed response validation. No ensemble signal is issued.";
   if (r.liquidityState && r.liquidityState !== "ok") {
@@ -66,7 +67,7 @@ function renderCard(r: ReportRow, index: number): string {
   const url = safeReceipt(r.receiptUrl);
   const oracleUrl = oracleExplorerUrl(r.oracleQuestionId);
   return `<article class="signal-card" data-signal="${state}">
-    <div class="card-top"><div class="identity"><span class="asset-icon ${r.asset === "ETH" ? "eth" : "btc"}" aria-hidden="true">${r.asset === "ETH" ? "Ξ" : r.asset === "BTC" ? "₿" : "·"}</span><div><span class="eyebrow">${escapeHtml(r.asset)} / EVENT CONTRACT</span><h3>${escapeHtml(r.question)}</h3></div></div>${badge(state)}</div>
+    <div class="card-top"><div class="identity"><span class="asset-icon ${r.asset === "ETH" ? "eth" : "btc"}" aria-hidden="true">${r.asset === "ETH" ? "Ξ" : r.asset === "BTC" ? "₿" : "·"}</span><div><span class="eyebrow">${escapeHtml(r.asset)} / EVENT CONTRACT${r.isOrganizerTestFixture ? ` <span class="subtle-tag">ORGANIZER TEST FIXTURE</span>` : ""}</span><h3>${escapeHtml(r.question)}</h3></div></div>${badge(state)}</div>
     <p class="symbol">${escapeHtml(r.symbol)}</p>
     <div class="market-metrics"><div><span>DreamDEX</span><strong>${formatProbability(r.dreamdexUp)}</strong></div><div><span>Independent ensemble</span><strong class="blue">${formatProbability(r.ensembleEst)}</strong></div><div><span>Ensemble divergence</span><strong class="${finite(r.divergence) && r.divergence < 0 ? "negative" : "positive"}">${formatDivergence(r.divergence)}</strong></div></div>
     <div class="comparison">${bar("Market", r.dreamdexUp, "market-bar")}${bar("Ensemble", r.ensembleEst, "ensemble-bar")}</div>

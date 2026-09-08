@@ -657,7 +657,12 @@ async function main() {
         oracleQuestionId: m.oracleQuestionId,
         openingPrice: null, currentPrice: null, movePct: null, dreamdexUp: null, naiveEst: null,
         llmEst: null, ensembleEst: null, llmStatus: "skipped", divergence: null, flagged: false,
-        agreement: "none", thinking: null, reasoningTruncated: false, expiresAt: new Date(m.expiry * 1000).toISOString() };
+        agreement: "none", thinking: null, reasoningTruncated: false, expiresAt: new Date(m.expiry * 1000).toISOString(),
+        // An explicit "test" marker the market creator put in the question (e.g. "Pricefeed
+        // test: ..."), not text parsed to derive price/asset data — kept in the report (not
+        // filtered) since these are the hackathon organizers' own fixtures, but labeled so a
+        // reader doesn't mistake missing data here for EdgeScope failing on a real market.
+        isOrganizerTestFixture: /\btest\b/i.test(m.question) };
       rows.push(row);
       try {
         if (remainingMinutes(m.expiry) <= 1) { row.issue = "Market expired or too close to expiry before estimation."; continue; }

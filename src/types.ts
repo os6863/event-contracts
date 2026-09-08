@@ -29,6 +29,8 @@ export type ReportRow = {
   divergence: number | null;
   flagged: boolean;
   agreement: SignalAgreement;
+  /** True when the question text explicitly marks this as a test fixture (e.g. "Pricefeed test: ..."), typically created by the hackathon organizers to test their own infrastructure rather than a market meant for EdgeScope's own signal analysis. This reads an explicit label the market creator put in the question — it is not parsing the question to derive price or asset data. */
+  isOrganizerTestFixture?: boolean;
   observedAt?: string;
   expiresAt?: string;
   priceObservedAt?: string;

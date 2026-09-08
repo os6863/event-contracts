@@ -300,6 +300,13 @@ test("an honest note explains when every usable market currently shows no signal
   const emptyReport = renderReport([], [entry], row.observedAt!); // no usable markets at all — different situation, no note
   assert.ok(!emptyReport.includes("expected outcome, not a malfunction"));
 });
+test("organizer test-fixture markets are labeled honestly instead of looking like a broken real market", () => {
+  const html = renderReport([{ ...row, isOrganizerTestFixture: true, question: "Pricefeed test: will BTC/USDC's price be at or above 78781.55 at unix time 1788886800?", openingPrice: null, currentPrice: null, dreamdexUp: null, naiveEst: null, llmEst: null, ensembleEst: null, llmStatus: "skipped" as const, agreement: "none" as const }], [entry], row.observedAt!);
+  assert.ok(html.includes("ORGANIZER TEST FIXTURE"));
+  assert.ok(html.includes("hackathon organizers to test DreamDEX's own price-feed infrastructure"));
+  const normal = renderReport([row], [entry], row.observedAt!); // base row has no isOrganizerTestFixture set
+  assert.ok(!normal.includes("ORGANIZER TEST FIXTURE"));
+});
 test("indexerBackoffDelayMs: doubles each attempt from the base", () => {
   assert.equal(indexerBackoffDelayMs(1, 3000), 3000);
   assert.equal(indexerBackoffDelayMs(2, 3000), 6000);

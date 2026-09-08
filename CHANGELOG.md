@@ -193,3 +193,11 @@ Fixed by trying CoinGecko's `market_chart` endpoint first (no equivalent IP rest
 **Already correctly represents reality, no action:** the decimals/units bug on the two October markets — the review's own framing (system catches and skips it, root cause is upstream in the indexer) already matches what the report says; there's no indexer-level fix available from this codebase. Testnet-wallet dependency for a fresh report — already mitigated by `render-report`, and the review itself called this a minor point.
 
 `npm run typecheck` passed; `npm test` — 29/29 passed (1 new: the zero-signal note renders only when every usable market is unflagged, and stays silent when there's at least one signal or when there are no usable markets at all — a different situation with its own existing empty-state message).
+
+### Pricefeed-test markets: labeled, not removed — the decision the user actually made
+
+Two "Pricefeed test" markets (hackathon-organizer fixtures, not standard EdgeScope-relevant contracts) were rendering as unexplained all-`n/a` cards. Removing them was explicitly considered and rejected earlier (they aren't this project's fixture to remove, and doing so risks running afoul of a rule this repo doesn't have visibility into) — leaving them unlabeled was also rejected, since an unexplained `n/a` card reads as EdgeScope failing on a real market, undermining the same "evidence and accountability" claim this project is built on.
+
+Landed the middle option: `ReportRow.isOrganizerTestFixture` is set from an explicit "test" marker the market creator put in the question text (e.g. "Pricefeed test: ...") — this reads a label the creator chose, not parsing the question to derive price or asset data, which the SDK docs specifically warn against. When true, the card shows a visible "ORGANIZER TEST FIXTURE" tag in the header (no need to expand anything to see it) and a specific explanation: this is the organizers' own infrastructure test, not part of EdgeScope's live signal data, kept in the report rather than filtered. Same pattern already used for the opening-price plausibility guard: disclose plainly rather than silently drop or silently render.
+
+`npm run typecheck` passed; `npm test` — 30/30 passed (1 new: the tag and explanation appear only when `isOrganizerTestFixture` is set).
