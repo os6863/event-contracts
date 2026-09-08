@@ -292,6 +292,14 @@ test("normalizePrivateKey: adds a missing 0x prefix, trims whitespace, and rejec
   assert.throws(() => normalizePrivateKey("0x" + "a".repeat(63)), /32-byte/); // one char short
   assert.throws(() => normalizePrivateKey("not-hex-at-all"), /32-byte/);
 });
+test("an honest note explains when every usable market currently shows no signal, and stays silent otherwise", () => {
+  const allNone = renderReport([{ ...row, agreement: "none" as const, divergence: 0.05 }], [entry], row.observedAt!);
+  assert.ok(allNone.includes("expected outcome, not a malfunction"));
+  const someSignal = renderReport([row], [entry], row.observedAt!); // base row is agreement: "strong"
+  assert.ok(!someSignal.includes("expected outcome, not a malfunction"));
+  const emptyReport = renderReport([], [entry], row.observedAt!); // no usable markets at all — different situation, no note
+  assert.ok(!emptyReport.includes("expected outcome, not a malfunction"));
+});
 test("indexerBackoffDelayMs: doubles each attempt from the base", () => {
   assert.equal(indexerBackoffDelayMs(1, 3000), 3000);
   assert.equal(indexerBackoffDelayMs(2, 3000), 6000);
