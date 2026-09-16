@@ -6637,7 +6637,13 @@
     "divergence": 0.16900217470326728,
     "agreement": "weak",
     "requestId": "14289989",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14289989"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14289989",
+    "resolved": true,
+    "actualOutcome": "NO",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.04020025000000001,
+    "ensembleBrier": 0.13653185711044385
   },
   {
     "timestamp": "2026-09-16T16:45:41.811Z",
@@ -6698,5 +6704,35 @@
     "agreement": "none",
     "requestId": "14290266",
     "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14290266"
+  },
+  {
+    "timestamp": "2026-09-16T19:59:48.999Z",
+    "version": "0.1.0",
+    "symbol": "BTC-0-17SEP26/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001bff6",
+    "asset": "BTC",
+    "dreamdexUp": 0.731,
+    "naiveEst": 0.7805790933745577,
+    "llmEst": 0.6,
+    "ensembleEst": 0.6902895466872788,
+    "divergence": -0.04071045331272116,
+    "agreement": "none",
+    "requestId": "14302350",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14302350"
+  },
+  {
+    "timestamp": "2026-09-16T20:00:54.597Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-17SEP26/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001bff7",
+    "asset": "ETH",
+    "dreamdexUp": 0.6054999999999999,
+    "naiveEst": 0.6253284469638942,
+    "llmEst": 0.6,
+    "ensembleEst": 0.612664223481947,
+    "divergence": 0.0071642234819471184,
+    "agreement": "none",
+    "requestId": "14302465",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14302465"
   }
 ]
