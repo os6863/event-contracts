@@ -8080,7 +8080,13 @@
     "divergence": -0.02737506829656633,
     "agreement": "none",
     "requestId": "14478105",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478105"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478105",
+    "resolved": true,
+    "actualOutcome": "YES",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.18662399999999996,
+    "ensembleBrier": 0.2110254533724749
   },
   {
     "timestamp": "2026-09-18T18:19:35.534Z",
@@ -8095,7 +8101,13 @@
     "divergence": -0.001586145117340565,
     "agreement": "none",
     "requestId": "14478170",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478170"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478170",
+    "resolved": true,
+    "actualOutcome": "YES",
+    "dreamdexCorrect": false,
+    "ensembleCorrect": false,
+    "dreamdexBrier": 0.268324,
+    "ensembleBrier": 0.2699697621978981
   },
   {
     "timestamp": "2026-09-18T18:20:23.083Z",
@@ -8110,7 +8122,13 @@
     "divergence": 0.06164784925477984,
     "agreement": "none",
     "requestId": "14478236",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478236"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478236",
+    "resolved": true,
+    "actualOutcome": "NO",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.08208224999999998,
+    "ensembleBrier": 0.12120692494072889
   },
   {
     "timestamp": "2026-09-18T18:22:21.074Z",
@@ -8125,7 +8143,13 @@
     "divergence": -0.06820518283760202,
     "agreement": "weak",
     "requestId": "14478356",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478356"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478356",
+    "resolved": true,
+    "actualOutcome": "YES",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.0058522500000000015,
+    "ensembleBrier": 0.020939589940063834
   },
   {
     "timestamp": "2026-09-18T18:24:08.227Z",
@@ -8140,6 +8164,87 @@
     "divergence": -0.09062728381853369,
     "agreement": "none",
     "requestId": "14478463",
-    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478463"
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14478463",
+    "resolved": true,
+    "actualOutcome": "YES",
+    "dreamdexCorrect": true,
+    "ensembleCorrect": true,
+    "dreamdexBrier": 0.066049,
+    "ensembleBrier": 0.12084472845505138
+  },
+  {
+    "timestamp": "2026-09-18T21:35:40.764Z",
+    "version": "0.1.0",
+    "symbol": "BTC-0-18SEP26-2145/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001c9dc",
+    "asset": "BTC",
+    "dreamdexUp": 0.4385,
+    "naiveEst": 0.4344258167884085,
+    "llmEst": 0.49,
+    "ensembleEst": 0.46221290839420426,
+    "divergence": 0.023712908394204257,
+    "agreement": "none",
+    "requestId": "14490588",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14490588"
+  },
+  {
+    "timestamp": "2026-09-18T21:36:17.062Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-18SEP26-2145/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001c9dd",
+    "asset": "ETH",
+    "dreamdexUp": 0.335,
+    "naiveEst": 0.275084512967417,
+    "llmEst": 0.4,
+    "ensembleEst": 0.3375422564837085,
+    "divergence": 0.0025422564837084827,
+    "agreement": "none",
+    "requestId": "14490624",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14490624"
+  },
+  {
+    "timestamp": "2026-09-18T21:37:07.987Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-18SEP26-2200/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001c9ca",
+    "asset": "ETH",
+    "dreamdexUp": 0.38749999999999996,
+    "naiveEst": 0.38282902480833897,
+    "llmEst": 0.46,
+    "ensembleEst": 0.4214145124041695,
+    "divergence": 0.03391451240416954,
+    "agreement": "none",
+    "requestId": "14490685",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14490685"
+  },
+  {
+    "timestamp": "2026-09-18T21:37:51.377Z",
+    "version": "0.1.0",
+    "symbol": "BTC-0-18SEP26-2200/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001c9c9",
+    "asset": "BTC",
+    "dreamdexUp": 0.746,
+    "naiveEst": 0.6525458671817115,
+    "llmEst": 0.54,
+    "ensembleEst": 0.5962729335908558,
+    "divergence": -0.14972706640914424,
+    "agreement": "weak",
+    "requestId": "14490738",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14490738"
+  },
+  {
+    "timestamp": "2026-09-18T21:38:30.872Z",
+    "version": "0.1.0",
+    "symbol": "ETH-0-19SEP26-C9A6/tUSDC#YES",
+    "marketId": "0x000000000000000000000000000000000000000000000000000000000001c9a6",
+    "asset": "ETH",
+    "dreamdexUp": 0.401,
+    "naiveEst": 0.3784488065488167,
+    "llmEst": 0.4,
+    "ensembleEst": 0.3892244032744083,
+    "divergence": -0.011775596725591697,
+    "agreement": "none",
+    "requestId": "14490786",
+    "receiptUrl": "https://receipts.testnet.agents.somnia.host/agent-receipts?contractAddress=0x037Bb9C718F3f7fe5eCBDB0b600D607b52706776&requestId=14490786"
   }
 ]
